@@ -1,0 +1,30 @@
+=== SOC Lab: Ung pho su co xam nhap SSH (Wazuh SIEM) ===
+
+Mot ke tan cong da brute-force SSH vao "target" va CHIEM DUOC mot tai khoan nhan vien,
+roi CAI CAM de quay lai (SSH key backdoor + cronjob doc). No con dinh ky cai lai,
+nen ban phai CHAN duoc no thi don dep moi triet de.
+
+Nhiem vu: DIEU TRA va UNG PHO tu tram DEFENDER (khong lam truc tiep tren target).
+
+*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+
+--- 1) Dashboard (tren defender, Firefox tu mo) ---
+  https://172.20.0.20   (Advanced -> Add Exception)
+  admin / (tren siem chay: sudo cat /root/wazuh-admin-credentials.txt)
+  -> Threat Hunting: tim IP tan cong, va TAI KHOAN NAO bi chiem
+     (tai khoan co su kien dang nhap THANH CONG, khac voi chi bi thu that bai).
+
+--- 2) Dieu tra & ung pho (SSH tu defender sang target) ---
+  ssh analyst@target            (mat khau: analyst)
+  a. Xac dinh tai khoan bi chiem:  sudo cat /var/log/auth.log | grep "Accepted password"
+                                   (dang: "Accepted password for emp#### from 172.20.0.5")
+  b. Chan ke tan cong:             sudo iptables -A INPUT -s <IP> -j DROP
+  c. Go SSH key backdoor:          soat /home/<user>/.ssh/authorized_keys,
+                                   xoa dong co 'backdoor@attacker'
+  d. Xoa cronjob doc:              sudo crontab -u <user> -l
+                                   sudo crontab -u <user> -r   (hoac xoa dong .beacon)
+  e. Khoa tai khoan bi chiem:      sudo passwd -l <user>
+  f. Kiem chung: khong con backdoor/cron; SSH hop le van hoat dong.
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (da chan + khoa + go sach backdoor & cron).

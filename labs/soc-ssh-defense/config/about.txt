@@ -1,0 +1,3 @@
+SOC Lab 1 - Phong thu SSH brute-force.
+Mot may tan cong (an) lien tuc do mat khau SSH vao may cua ban.
+Nhiem vu: phat hien qua log va chan IP ke tan cong bang iptables.

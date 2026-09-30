@@ -1,0 +1,66 @@
+#
+# Labtainer Dockerfile - target (may nan nhan / tram phong thu)
+#
+ARG registry
+# Base co san openssh-server + xinetd (sshd) + rsyslog (auth.log)
+FROM $registry/labtainer.network.ssh
+#FROM $registry/labtainer.base2
+#FROM $registry/labtainer.network
+#FROM $registry/labtainer.centos
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+#  put package installation here, e.g.,
+#     RUN apt-get update && apt-get install -y --no-install-recommends somepackage
+#
+# Cho phep prestop chay "sudo -n iptables" khong can mat khau (de chup rule luc cham diem)
+# %sudo NOPASSWD cho cac lenh dieu tra/xu ly + prestop (iptables, cat, crontab, grep, passwd)
+RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/sbin/iptables, /sbin/iptables, /usr/sbin/iptables-save, /sbin/iptables-save, /usr/bin/cat, /bin/cat, /usr/bin/crontab, /bin/crontab, /usr/bin/grep, /bin/grep, /usr/bin/passwd, /bin/passwd' > /etc/sudoers.d/labtainer-iptables \
+    && chmod 440 /etc/sudoers.d/labtainer-iptables
+#
+# cron: can cho kich ban persistence (attacker cai cronjob) + prestop doc crontab
+RUN apt-get update && apt-get install -y --no-install-recommends cron || true
+#
+# --- Wazuh agent (bake luc build, tro ve manager 172.20.0.20) ---
+RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg
+RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
+    && chmod 644 /usr/share/keyrings/wazuh.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list
+RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent
+RUN systemctl enable wazuh-agent
+#
+# Install the system files found in the _system directory
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+#  **** Perform all root operations, e.g.,           ****
+#  **** "apt-get install" prior to the USER command. ****
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+# Install files in the user home directory
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+# remove after docker fixes problem with empty tars
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+#  The first thing that executes on the container.
+#
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]

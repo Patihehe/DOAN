@@ -1,0 +1,9 @@
+#!/bin/bash
+# Chay luc 'checkwork'/'stoplab' tren siem. Chup bang chung SIEM da phat hien tan cong.
+trap "echo Timed out; exit" SIGTERM
+
+echo "=== wazuh alerts (attacker 172.20.0.5) ==="
+sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null | grep '172.20.0.5' | tail -50
+
+echo "=== agents ==="
+sudo -n /var/ossec/bin/agent_control -l 2>/dev/null

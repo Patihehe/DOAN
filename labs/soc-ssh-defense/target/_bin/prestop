@@ -1,0 +1,28 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== iptables -S ==="
+sudo -n iptables -S 2>/dev/null
+
+echo "=== auth.log ==="
+sudo -n cat /var/log/auth.log 2>/dev/null
+
+echo "=== emp authorized_keys ==="
+for u in $(ls /home 2>/dev/null | grep '^emp'); do
+  echo "user:$u"
+  sudo -n cat /home/$u/.ssh/authorized_keys 2>/dev/null
+done
+
+echo "=== emp crontabs ==="
+for u in $(ls /home 2>/dev/null | grep '^emp'); do
+  echo "user:$u"
+  sudo -n crontab -u $u -l 2>/dev/null
+done
+
+echo "=== emp shadow lock ==="
+for u in $(ls /home 2>/dev/null | grep '^emp'); do
+  sudo -n grep "^$u:" /etc/shadow 2>/dev/null
+done
