@@ -1,0 +1,18 @@
+#!/bin/bash
+# prestop he A (Blue): tu-test lenh inject co con chay khong + ping thuong con 200 khong.
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER_A"
+# ;id -> neu con dinh, body chua 'uid='
+echo "INJECT_UID=$(curl -s 'http://localhost/ping.php?host=127.0.0.1%3Bid' | grep -c 'uid=')"
+echo "NORMAL_PING=$(curl -s -o /dev/null -w '%{http_code}' 'http://localhost/ping.php?host=127.0.0.1')"
+
+echo "=== modsec ==="
+grep -hE '^[[:space:]]*SecRuleEngine' /etc/modsecurity/modsecurity.conf 2>/dev/null
+grep -rhE 'SecRule' /etc/modsecurity 2>/dev/null | grep -vi recommended | tail -10
+
+echo "=== access.log - command injection tu attacker (172.20.0.5) ==="
+sudo -n grep -iE 'ping.php.*(;|%3B|\||id|cat)' /var/log/apache2/access.log 2>/dev/null | grep '172.20.0.5' | tail -10
+
+echo "=== findings.txt ==="
+cat /home/analyst/findings.txt 2>/dev/null

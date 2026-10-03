@@ -1,0 +1,49 @@
+#
+# Labtainer Dockerfile - siem (chay Wazuh: indexer + server + dashboard)
+#
+ARG registry
+FROM $registry/labtainer.base2
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+# Cong cu cho bake + cai offline (setcap = libcap2-bin)
+RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg tar libcap2-bin openssl \
+    && rm -rf /var/lib/apt/lists/*
+#
+# Cho prestop doc alerts + agent_control khong can mat khau (de cham diem)
+RUN echo 'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /var/ossec/logs/alerts/alerts.log, /usr/bin/cat /var/ossec/logs/alerts/alerts.log, /var/ossec/bin/agent_control' > /etc/sudoers.d/labtainer-wazuh \
+    && chmod 440 /etc/sudoers.d/labtainer-wazuh
+#
+# --- PRE-BAKE: tai goi Wazuh + tao chung chi luc BUILD (de first-boot cai OFFLINE) ---
+RUN mkdir -p /root/wz && cd /root/wz \
+ && curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh \
+ && bash wazuh-install.sh -dw deb -da amd64 \
+ && curl -sO https://packages.wazuh.com/4.14/config.yml \
+ && sed -i 's/<[a-z0-9-]*-ip>/127.0.0.1/g' config.yml \
+ && bash wazuh-install.sh -g
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]

@@ -1,0 +1,10 @@
+#!/bin/bash
+# prestop siem: chup bang chung Wazuh phat hien tan cong web (command injection) vao A.
+trap "echo Timed out; exit" SIGTERM
+
+echo "=== wazuh alerts (web / ping.php / 172.20.0.5) ==="
+sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
+  | grep -iE 'ping.php|command|injection|web|172.20.0.5' | tail -50
+
+echo "=== agents ==="
+sudo -n /var/ossec/bin/agent_control -l 2>/dev/null

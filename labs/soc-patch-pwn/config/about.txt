@@ -1,0 +1,4 @@
+SOC Lab KB5 - Patch & Pwn (Hybrid Blue + Red).
+Blue: he A cua ban dang bi tan cong command-injection lien tuc -> dieu tra qua SIEM va VA.
+Red: dung chinh ky thuat do de PWN he B (qua HTTP), lay flag.
+Muc tieu: A het bi dinh + lay duoc flag tu B.

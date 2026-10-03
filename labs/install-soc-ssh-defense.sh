@@ -307,7 +307,7 @@ ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
 # Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
-RUN apt-get update && apt-get install -y --no-install-recommends openssh-client \
+RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client \
     && rm -rf /var/lib/apt/lists/*
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /

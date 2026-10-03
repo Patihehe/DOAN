@@ -1,0 +1,14 @@
+#!/bin/bash
+# prestop he B (Red): kiem tra SV da PWN duoc chua.
+# SV khai thac RCE de ghi flag that vao /tmp/loot.txt (www-data tao, 644 -> doc duoc).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER_B"
+LOOT="$(cat /tmp/loot.txt 2>/dev/null | tr -d '\r' | head -1)"
+REAL="$(cat /var/www/flag.txt 2>/dev/null | tr -d '\r' | head -1)"
+echo "LOOT=$LOOT"
+if [ -n "$LOOT" ] && [ "$LOOT" = "$REAL" ]; then
+  echo "PWNED=YES"
+else
+  echo "PWNED=NO"
+fi

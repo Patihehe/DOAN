@@ -1,9 +1,8 @@
 #
-# Labtainer Dockerfile - defender (tram analyst, co Firefox xem dashboard Wazuh)
+# Labtainer Dockerfile - targetb (he B: web loi, chi HTTP, SV pwn lay flag)
 #
 ARG registry
-# firefox3 = Firefox moi (tren network3) - chay duoc dashboard Wazuh hien dai
-FROM $registry/labtainer.firefox3
+FROM $registry/labtainer.network
 #
 ARG lab
 ARG labdir
@@ -16,15 +15,17 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
-# Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
-RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client \
-    && rm -rf /var/lib/apt/lists/*
+# Web stack + ping (khong Wazuh, khong modsec, khong SSH -> chi vao duoc qua HTTP)
+RUN apt-get update && ( \
+      apt-get install -y --no-install-recommends apache2 php libapache2-mod-php iputils-ping \
+      || apt-get install -y --no-install-recommends apache2 libapache2-mod-php7.0 iputils-ping \
+    ) ; rm -rf /var/lib/apt/lists/*
+RUN systemctl enable apache2 2>/dev/null || true
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /
 #
-# Base firefox3 co the da co san user 'ubuntu' -> chi tao neu chua co
-RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN useradd -ms /bin/bash $user_name
 RUN echo "$user_name:$password" | chpasswd
 RUN adduser $user_name sudo
 #

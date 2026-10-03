@@ -1,9 +1,8 @@
 #
-# Labtainer Dockerfile - defender (tram analyst, co Firefox xem dashboard Wazuh)
+# Labtainer Dockerfile - attacker (command injection tu dong, an)
 #
 ARG registry
-# firefox3 = Firefox moi (tren network3) - chay duoc dashboard Wazuh hien dai
-FROM $registry/labtainer.firefox3
+FROM $registry/labtainer.network
 #
 ARG lab
 ARG labdir
@@ -16,15 +15,13 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
-# Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
-RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* || true
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /
 #
-# Base firefox3 co the da co san user 'ubuntu' -> chi tao neu chua co
-RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN useradd -ms /bin/bash $user_name
 RUN echo "$user_name:$password" | chpasswd
 RUN adduser $user_name sudo
 #
