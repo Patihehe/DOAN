@@ -1,0 +1,36 @@
+=== SOC Lab: Reverse shell + Threat Hunting (Wazuh SIEM) ===
+
+May "target" DA BI NHIEM SAN: mot cronjob dinh ky (moi phut) bung REVERSE SHELL ve may
+tan cong (C2). Ban KHONG biet truoc file doc o dau - phai SAN (threat hunting) qua SIEM.
+
+Nhiem vu: DIEU TRA qua Wazuh, xac dinh IOC, roi GO SACH persistence + CAT DUT C2 +
+VA LO HONG de no khong tai ket noi. Thao tac tu tram DEFENDER.
+
+*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+
+--- 1) San moi de doa tren dashboard (defender, Firefox tu mo) ---
+  https://172.20.0.20   admin / (tren siem: sudo cat /root/wazuh-admin-credentials.txt)
+  -> Vao muc "Integrity monitoring" (FIM): tim FILE LA / bi thay doi lien tuc
+     (goi y: /usr/local/bin, /etc/cron.d, /tmp). Ghi lai duong dan file doc.
+
+--- 2) Dieu tra sau tren target (SSH tu defender) ---
+  ssh analyst@target            (mat khau: analyst)
+  a. Xem persistence:   cat /etc/cron.d/*            (tim dong cron la)
+                        ls -la /usr/local/bin/        (file doc, chu y quyen 0777 = LO HONG)
+  b. Xem ket noi C2:    sudo ss -tnp | grep -v 127.0.0.1    (tim ket noi ra 172.20.0.5:<cong>)
+                        -> ghi lai C2 IP + CONG (moi sinh vien mot cong khac nhau)
+  c. Ghi bao cao:       sua /home/analyst/findings.txt theo dinh dang KEY=value:
+       C2_IP=172.20.0.5
+       C2_PORT=<cong ban tim duoc>
+       MAL_SCRIPT=/usr/local/bin/.sysupdate
+       CRON_PERIOD=moi phut
+
+--- 3) Go sach + va lo hong (LAM THEO THU TU) ---
+  d. Xoa cron TRUOC (chan tai cai):   sudo rm -f /etc/cron.d/sysupdate
+  e. Kill tien trinh reverse shell:   sudo ss -tnp | grep 172.20.0.5     # xem pid=NNN
+                                      sudo kill -9 <NNN>
+  f. Xoa script doc + lock/beacon:    sudo rm -f /usr/local/bin/.sysupdate /tmp/.sysupd.lock /tmp/.c2beacon
+  g. Kiem chung: sudo ss -tn | grep 172.20.0.5    -> KHONG con ket noi nao.
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (het cron + het ket noi C2 + het tien trinh doc).

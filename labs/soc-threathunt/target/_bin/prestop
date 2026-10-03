@@ -1,0 +1,22 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+# Tat ca world-readable nen khong can sudo.
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== cron (persistence) ==="
+{ cat /etc/cron.d/* 2>/dev/null; sudo -n crontab -l -u root 2>/dev/null; } \
+  | grep -iE 'sysupdate|dev/tcp' | sed 's/^/CRONLINE: /'
+
+echo "SCRIPT_STAT=$(stat -c '%a %n' /usr/local/bin/.sysupdate 2>/dev/null || echo MISSING)"
+
+echo "=== tien trinh nghi ngo ==="
+ps -ef 2>/dev/null | grep -E 'sysupdate|/dev/tcp' | grep -v grep | sed 's/^/PROC: /'
+
+echo "C2_CONN=$(ss -tn 2>/dev/null | grep -c '172.20.0.5:')"
+
+echo "=== findings.txt (bao cao analyst) ==="
+cat /home/analyst/findings.txt 2>/dev/null
+
+echo "=== (GV doi chieu) IOC that: script=/usr/local/bin/.sysupdate ; cron=/etc/cron.d/sysupdate (moi phut) ; C2=172.20.0.5 ==="

@@ -1,0 +1,4 @@
+SOC Lab - Reverse shell + Threat Hunting.
+May target da bi nhiem san: mot cronjob dinh ky bung reverse shell ve may tan cong (C2).
+Nhiem vu: SAN moi de doa qua SIEM (Wazuh FIM + tien trinh/ket noi), xac dinh IOC,
+roi go sach persistence (cron + script doc) va vá lo hong de no khong tai ket noi.
