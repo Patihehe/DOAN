@@ -55,7 +55,12 @@ THI_DOAN/
 ├── README.md                  # File này
 ├── docs/                      # Tài liệu kế hoạch, hướng dẫn
 ├── labs/                      # Các lab Labtainers (đồng bộ sang VM)
-│   └── soc-ssh-defense/       # Lab Bước 1
+│   ├── soc-ssh-defense/       # Lab 1: SSH Brute-force & Persistence
+│   ├── soc-ddos/              # Lab 2: SYN Flood / DDoS Rate Limiting
+│   ├── install-soc-ssh-defense.sh # Script cài đặt Lab 1
+│   ├── install-soc-ddos.sh    # Script cài đặt Lab 2
+│   ├── make-soc-wazuh.sh      # Script đóng gói Shared SIEM Image
+│   └── apply-shared-siem.sh   # Script chuyển đổi SIEM dùng chung
 └── templates/                 # start.config mẫu lấy từ lab có sẵn (tham khảo)
 ```
 

@@ -1,0 +1,28 @@
+=== SOC Lab 2: Phong thu SYN Flood & DDoS Rate Limiting (Wazuh SIEM) ===
+
+Ke tan cong tu dong (172.20.0.5) dang ban bao toi TCP SYN Flood (hping3) sang may "target" (172.20.0.10)
+tren port 80, lam cạn kiet socket va nghen dich vu Web cua cong ty.
+
+Nhiem vu cua ban: DIEU TRA va UNG PHO tu tram DEFENDER de bao ve dich vu Web.
+
+--- 1) Giam sat tren SIEM (Dashboard Firefox tren Defender) ---
+  https://172.20.0.20   (admin / pass trong /root/wazuh-admin-credentials.txt tren siem)
+  -> Threat Hunting: Quan sat so luong goi tin TCP SYN va canh bao luong traffic gia tang tu IP 172.20.0.5.
+
+--- 2) Dieu tra & Ung pho (SSH tu defender sang target) ---
+  ssh analyst@target            (mat khau: analyst)
+
+  Phuong an A - Cau hinh Rate Limiting voi iptables (Khuyen nghi):
+    Cho phep luong goi SYN voi toc do gioi han (vi du limit BURST_VAL/s) va drop traffic vuot nguong:
+    sudo iptables -A INPUT -p tcp --syn --dport 80 -m limit --limit 5/s --limit-burst BURST_VAL -j ACCEPT
+    sudo iptables -A INPUT -p tcp --syn --dport 80 -j DROP
+
+  Phuong an B - Bat TCP Syncookies:
+    sudo sysctl -w net.ipv4.tcp_syncookies=1
+
+--- 3) Kiem chứng ---
+  Sau khi ap dung giai phap, kiem tra dich vu Web van phan hoi binh thuong:
+    curl -I http://localhost:80
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (Dich vu Web hoat dong tot + Da khac phuc SYN flood).

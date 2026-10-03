@@ -1,0 +1,18 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== iptables -S ==="
+sudo -n iptables -S 2>/dev/null
+
+echo "=== sysctl tcp_syncookies ==="
+sudo -n sysctl net.ipv4.tcp_syncookies 2>/dev/null
+
+echo "=== Check Web Service ==="
+if curl -s -m 2 http://localhost:80 >/dev/null 2>&1; then
+  echo "WEB_SERVICE_ALIVE_OK"
+else
+  echo "WEB_SERVICE_DOWN"
+fi

@@ -1,0 +1,3 @@
+SOC Lab 2 - Phong thu SYN Flood / DDoS Rate Limiting.
+Ke tan cong su dung hping3 SYN Flood lam nghen va tran dich vu Web tren Target.
+Nhiem vu: Phat hien qua SIEM va thiet lap Rate Limiting / TCP Syncookies de bao ve dich vu.
