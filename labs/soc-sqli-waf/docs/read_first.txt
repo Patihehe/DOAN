@@ -1,0 +1,42 @@
+=== SOC Lab KB3: SQL Injection -> dieu tra -> Web Application Firewall (Wazuh SIEM) ===
+
+Mot ke tan cong (an) dang LIEN TUC ban payload SQL Injection vao web app tren "target"
+(form dang nhap + tham so URL) va da EXFIL duoc du lieu nhay cam.
+
+Nhiem vu: DIEU TRA qua SIEM, roi BAT + VIET RULE ModSecurity (WAF) de chan SQLi,
+nhung KHONG duoc chan nham traffic hop le. Thao tac tu tram DEFENDER.
+
+*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+
+--- 1) Xem dashboard (tren defender, Firefox tu mo) ---
+  https://172.20.0.20   (Advanced -> Add Exception)
+  admin / (tren siem chay: sudo cat /root/wazuh-admin-credentials.txt)
+  -> Threat Hunting / Security events: loc su kien tu web (access.log).
+     Tim: IP ke tan cong, THAM SO bi khai thac, cac pattern SQLi (UNION SELECT, ' OR 1=1).
+
+--- 2) Dieu tra tren target (SSH tu defender) ---
+  ssh analyst@target            (mat khau: analyst)
+  a. Xem log web:        sudo grep -Ei 'union|select|1=1' /var/log/apache2/access.log
+                         -> xac dinh IP tan cong + endpoint + tham so (vi du: product.php?id=)
+  b. Tai hien exfil:     thu chay lai payload de biet du lieu gi bi lo, vi du:
+       curl "http://localhost/product.php?id=0%20UNION%20SELECT%20secret,1%20FROM%20secret_store"
+       -> ghi lai gia tri SECRET lay duoc (moi sinh vien mot gia tri khac nhau).
+  c. Ghi bao cao:        sua /home/analyst/findings.txt (dinh dang KEY=value), vi du:
+       PARAM=id
+       ATTACKER_IP=172.20.0.5
+       SECRET=FLAG-xxxxxx
+
+--- 3) Bat + viet rule WAF (ModSecurity da cai san nhung dang TAT) ---
+  d. Bat engine:   sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
+  e. Viet custom rule, vi du file /etc/modsecurity/custom.conf:
+       sudo tee /etc/modsecurity/custom.conf >/dev/null <<'EOF'
+       SecRule ARGS "@rx (?i:union(.*?)select|or[[:space:]]+1=1|'[[:space:]]*or)" \
+         "id:100001,phase:2,deny,status:403,log,msg:'SQLi blocked'"
+       EOF
+  f. Nap lai:      sudo systemctl reload apache2   (hoac: sudo service apache2 reload)
+  g. Kiem chung:
+       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=0%20UNION%20SELECT%20name,price%20FROM%20products"   # phai 403
+       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=1"                                                  # phai 200
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (WAF bat + chan dung SQLi + khong chan nham).

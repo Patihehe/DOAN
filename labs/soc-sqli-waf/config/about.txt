@@ -1,0 +1,4 @@
+SOC Lab KB3 - Tan cong Ung dung Web: SQL Injection -> WAF.
+Mot may tan cong (an) lien tuc ban payload SQLi vao web app cua ban, exfil du lieu.
+Nhiem vu: dieu tra access.log qua SIEM, roi bat va viet rule ModSecurity (WAF) chan SQLi
+ma khong chan nham traffic hop le.

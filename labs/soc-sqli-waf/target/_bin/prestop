@@ -1,0 +1,26 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+# Tu-test WAF: ban 1 request SQLi + 1 request thuong vao localhost, ghi HTTP code.
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== modsec status ==="
+sudo -n grep -hE '^[[:space:]]*SecRuleEngine' /etc/modsecurity/modsecurity.conf 2>/dev/null
+echo "--- custom rules (SV them) ---"
+sudo -n grep -rhE 'SecRule' /etc/modsecurity 2>/dev/null | grep -vi recommended | tail -20
+
+echo "=== self-test (WAF) ==="
+SQLI='http://localhost/product.php?id=0%20UNION%20SELECT%20name,price%20FROM%20products'
+NORMAL='http://localhost/product.php?id=1'
+echo "SQLI_TEST=$(curl -s -o /dev/null -w '%{http_code}' "$SQLI")"
+echo "NORMAL_TEST=$(curl -s -o /dev/null -w '%{http_code}' "$NORMAL")"
+
+echo "=== access.log - dau vet SQLi tu attacker (172.20.0.5) ==="
+sudo -n grep -iE 'union|select|1=1|%27|or%20' /var/log/apache2/access.log 2>/dev/null | grep '172.20.0.5' | tail -20
+
+echo "=== findings.txt (bao cao analyst) ==="
+cat /home/analyst/findings.txt 2>/dev/null
+
+echo "=== secret thuc te (cho giang vien doi chieu) ==="
+sudo -n sqlite3 /var/www/db/shop.db 'SELECT secret FROM secret_store;' 2>/dev/null

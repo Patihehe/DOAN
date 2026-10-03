@@ -1,0 +1,11 @@
+# File sao luu / tam
+*.bak
+*.tmp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Log/artifact khi chay thu
+*.log
