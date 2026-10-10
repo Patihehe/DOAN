@@ -1,0 +1,23 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+# LO HONG 1: /usr/bin/find con SUID? (4xxx = con bit SUID) - world-readable, khong can sudo
+echo "FIND_PERM=$(stat -c '%a' /usr/bin/find 2>/dev/null)"
+
+# LO HONG 2: con dong sudo NOPASSWD cho devuser khong?
+sudo -n grep -rhiE 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -i devuser | sed 's/^/SUDORULE: /'
+
+echo "=== bang chung leo quyen (proof, world-readable) ==="
+echo "ROOTPROOF1:"; cat /tmp/.rootproof1 2>/dev/null
+echo "ROOTPROOF2:"; cat /tmp/.rootproof2 2>/dev/null
+
+echo "=== cac file SUID bat thuong (tham khao) ==="
+find /usr/bin /bin -perm -4000 -type f 2>/dev/null | sed 's/^/SUIDFILE: /'
+
+echo "=== findings.txt (bao cao analyst) ==="
+cat /home/analyst/findings.txt 2>/dev/null
+
+echo "=== (GV) IOC that: SUID /usr/bin/find ; sudo NOPASSWD awk (devuser) ==="

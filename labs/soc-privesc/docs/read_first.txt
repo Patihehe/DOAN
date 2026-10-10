@@ -1,0 +1,38 @@
+=== SOC Lab: Leo thang dac quyen (Privilege Escalation) -> dieu tra -> Hardening ===
+
+May "target" co tai khoan thuong 'devuser' DA BI CHIEM. Ke tan cong dung foothold do de
+LEO LEN ROOT qua 2 loi cau hinh, va dinh ky chiem lai. Ban phai SAN qua SIEM, phat hien
+CA HAI duong leo quyen roi VA chung de khong con leo len root duoc.
+
+Nhiem vu: dieu tra qua Wazuh, va he thong tu tram DEFENDER.
+
+*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+
+--- 1) San moi de doa tren dashboard (defender, Firefox tu mo) ---
+  https://172.20.0.20   admin / (tren siem: sudo cat /root/wazuh-admin-credentials.txt)
+  -> Integrity monitoring (FIM): thay /root/.pwned va /tmp/.rootproof* bi ghi lien tuc
+     => co ke dang dat quyen ROOT. Can tim DUONG NAO cho phep leo quyen.
+
+--- 2) Dieu tra tren target (SSH tu defender) ---
+  ssh analyst@target            (mat khau: analyst)
+  a. Liet ke file SUID bat thuong:
+       find / -perm -4000 -type f 2>/dev/null
+       -> chu y /usr/bin/find co bit SUID (BAT THUONG - GTFOBins: leo quyen duoc)
+  b. Kiem tra cau hinh sudo cua tai khoan bi chiem:
+       sudo cat /etc/sudoers.d/*        (tim dong NOPASSWD la)
+       -> devuser duoc chay 'sudo awk' khong mat khau (awk -> system() -> shell root)
+  c. Ghi bao cao: sua /home/analyst/findings.txt (dinh dang KEY=value):
+       VECTOR1=/usr/bin/find
+       VECTOR2=sudo awk
+       TAI_KHOAN_BI_CHIEM=devuser
+
+--- 3) Hardening: va CA HAI duong leo quyen ---
+  d. Go SUID tren find:         sudo chmod u-s /usr/bin/find
+  e. Xoa quyen sudo nguy hiem:  sudo rm -f /etc/sudoers.d/devuser
+  f. (Nen) chan foothold:       sudo passwd -l devuser ; sudo rm -f /root/.pwned
+  g. Kiem chung:
+       stat -c '%a' /usr/bin/find        -> KHONG con bat dau bang 4 (vd 755)
+       sudo -l -U devuser                -> khong con dong NOPASSWD awk
+
+Xong: checkwork / stoplab.
+Muc tieu: incident_resolved = Y  (da va CA HAI lo hong leo quyen).

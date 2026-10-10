@@ -1,0 +1,4 @@
+SOC Lab - Leo thang dac quyen (Privilege Escalation) & Hardening.
+May target co 2 loi cau hinh cho phep leo len root: SUID tren /usr/bin/find va
+sudo NOPASSWD tren awk cho tai khoan devuser (da bi chiem). Ke tan cong dung chung
+de chiem root. Nhiem vu: dieu tra qua SIEM, phat hien ca 2 duong leo quyen va va chung.

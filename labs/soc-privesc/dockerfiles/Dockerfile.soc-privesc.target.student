@@ -1,0 +1,50 @@
+#
+# Labtainer Dockerfile - target (2 lo hong leo quyen + Wazuh agent)
+#
+ARG registry
+# Base co openssh-server (sshd) + rsyslog -> devuser/analyst SSH duoc
+FROM $registry/labtainer.network.ssh
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+# Cho prestop doc sudoers (440 root) khong mat khau
+RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/grep, /bin/grep, /usr/bin/cat, /bin/cat' > /etc/sudoers.d/labtainer-pe \
+    && chmod 440 /etc/sudoers.d/labtainer-pe
+#
+# Dam bao co sudo, findutils (find), mawk (awk)
+RUN apt-get update && apt-get install -y --no-install-recommends sudo findutils mawk \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# --- Wazuh agent (bake, tro ve manager 172.20.0.20) ---
+RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg
+RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
+    && chmod 644 /usr/share/keyrings/wazuh.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list
+RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent
+RUN systemctl enable wazuh-agent
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]

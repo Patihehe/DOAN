@@ -1,0 +1,10 @@
+#!/bin/bash
+# prestop siem: chup bang chung Wazuh phat hien leo quyen (FIM /root, /tmp, sudoers).
+trap "echo Timed out; exit" SIGTERM
+
+echo "=== wazuh alerts (FIM: /root/.pwned, rootproof, sudoers) ==="
+sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
+  | grep -iE 'syscheck|integrity|pwned|rootproof|sudoers|/root' | tail -50
+
+echo "=== agents ==="
+sudo -n /var/ossec/bin/agent_control -l 2>/dev/null
