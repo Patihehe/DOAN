@@ -1,2 +1,4 @@
 wazuh-agent
 sudo
+iptables
+iptables-save

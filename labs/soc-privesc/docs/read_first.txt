@@ -1,38 +1,112 @@
-=== SOC Lab: Leo thang dac quyen (Privilege Escalation) -> dieu tra -> Hardening ===
+================================================================================
+ SOC LAB (FLAGSHIP): DIEU TRA & UNG PHO SU CO LEO THANG DAC QUYEN (INCIDENT RESPONSE)
+================================================================================
 
-May "target" co tai khoan thuong 'devuser' DA BI CHIEM. Ke tan cong dung foothold do de
-LEO LEN ROOT qua 2 loi cau hinh, va dinh ky chiem lai. Ban phai SAN qua SIEM, phat hien
-CA HAI duong leo quyen roi VA chung de khong con leo len root duoc.
+1. TONG QUAN (OVERVIEW)
+--------------------------------------------------------------------------------
+Mot cuoc xam nhap vua xay ra tren may chu 'target'. He thong giam sat Wazuh ghi nhan
+dang nhap quyen ROOT bat thuong tu mot dia chi noi bo la. Dieu tra so bo: ke tan cong
+chiem mot tai khoan nguoi dung, LEO THANG len root qua loi cau hinh, va cai CUA SAU
+(persistence) de quay lai. Ban la nhan vien SOC: dung lai chuoi tan cong, CACH LY,
+GO SACH, va dam bao ke tan cong khong the quay lai.
 
-Nhiem vu: dieu tra qua Wazuh, va he thong tu tram DEFENDER.
+LUU Y QUAN TRONG: moi may bi tan cong co ten tai khoan KHAC NHAU (ca nhan hoa). Ban PHAI
+tu dieu tra ra ten tren he thong CUA MINH - khong the chep dap an cua ban khac.
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+2. MUC TIEU HOC TAP (OBJECTIVES)
+--------------------------------------------------------------------------------
+  - Dung dashboard Wazuh (Threat Hunting / FIM / MITRE) de phat hien & khoanh vung su co.
+  - Dung lai CHUOI TAN CONG va TIMELINE: initial access -> privilege escalation -> persistence.
+  - Tu liet ke cac duong leo quyen (SUID, sudo) va nhan dien persistence (backdoor UID 0).
+  - Thuc hanh vong doi IR: CONTAINMENT (cach ly) truoc, roi ERADICATION (go bo).
+  - Bao cao IOC chinh xac cho he thong cua minh (chong chep).
 
---- 1) San moi de doa tren dashboard (defender, Firefox tu mo) ---
-  https://172.20.0.20   admin / (tren siem: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Integrity monitoring (FIM): thay /root/.pwned va /tmp/.rootproof* bi ghi lien tuc
-     => co ke dang dat quyen ROOT. Can tim DUONG NAO cho phep leo quyen.
+3. KIEN THUC NEN (BACKGROUND)
+--------------------------------------------------------------------------------
+* Vong doi IR (NIST): Detection -> CONTAINMENT (chan nguon, cat ket noi) -> ERADICATION
+  (go persistence + bit lo hong) -> Recovery -> Lessons. Cach ly TRUOC de "cam mau",
+  tranh ke tan cong pha hoai them trong luc ta don dep.
+* SUID: file co bit SUID (vd 4755) chay voi EUID chu so huu (root). Chuong trinh "thoat
+  shell duoc" + SUID root -> ai cung lay shell root. Tra cuu: https://gtfobins.github.io
+* sudo NOPASSWD: cho chay lenh voi quyen root khong can mat khau. Neu lenh thoat shell
+  duoc (awk/less/vim/find) -> leo len root.
+* Persistence - backdoor UID 0: tai khoan co UID=0 (tuong duong root) nhung ten "vo hai".
+  Moi tai khoan UID 0 ngoai 'root' deu dang ngo.
+* Wazuh dashboard: Threat Hunting (loc su kien theo thoi gian/agent/rule - dung dung timeline),
+  Integrity Monitoring/FIM (file bi them/sua), MITRE ATT&CK (map alert -> technique).
 
---- 2) Dieu tra tren target (SSH tu defender) ---
-  ssh analyst@target            (mat khau: analyst)
-  a. Liet ke file SUID bat thuong:
-       find / -perm -4000 -type f 2>/dev/null
-       -> chu y /usr/bin/find co bit SUID (BAT THUONG - GTFOBins: leo quyen duoc)
-  b. Kiem tra cau hinh sudo cua tai khoan bi chiem:
-       sudo cat /etc/sudoers.d/*        (tim dong NOPASSWD la)
-       -> devuser duoc chay 'sudo awk' khong mat khau (awk -> system() -> shell root)
-  c. Ghi bao cao: sua /home/analyst/findings.txt (dinh dang KEY=value):
-       VECTOR1=/usr/bin/find
-       VECTOR2=sudo awk
-       TAI_KHOAN_BI_CHIEM=devuser
+4. MOI TRUONG & SO DO (TOPOLOGY)
+--------------------------------------------------------------------------------
+  attacker (172.20.0.5, AN)  -- ke tan cong (foothold + backdoor), dinh ky quay lai
+  target   (172.20.0.10)     -- may bi xam nhap; co Wazuh agent
+  siem     (172.20.0.20)     -- Wazuh (dashboard https://172.20.0.20)
+  defender (172.20.0.30)     -- tram cua ban: Firefox + SSH de ung pho
+  Ung pho:  ssh analyst@target   (mat khau: analyst)
+  *** Cho siem cai Wazuh (~8-10'):  tail -f /var/log/wazuh-install.log .
+      Ke tan cong ra tay theo 3 GIAI DOAN cach nhau ~2': (1) dang nhap -> (2) leo quyen ->
+      (3) cai backdoor. Hay cho ~12-15' ke tu khi start lab de ca chuoi tan cong hoan tat
+      (kiem tra: tren target da xuat hien tai khoan UID 0 la) roi hay dieu tra/ung pho. ***
 
---- 3) Hardening: va CA HAI duong leo quyen ---
-  d. Go SUID tren find:         sudo chmod u-s /usr/bin/find
-  e. Xoa quyen sudo nguy hiem:  sudo rm -f /etc/sudoers.d/devuser
-  f. (Nen) chan foothold:       sudo passwd -l devuser ; sudo rm -f /root/.pwned
-  g. Kiem chung:
-       stat -c '%a' /usr/bin/find        -> KHONG con bat dau bang 4 (vd 755)
-       sudo -l -U devuser                -> khong con dong NOPASSWD awk
+5. NHIEM VU (TASKS)
+--------------------------------------------------------------------------------
+--- Task 1: Phat hien & khoanh vung (DUNG DASHBOARD) ---
+  Dashboard Wazuh (admin / pass: tren siem `sudo cat /root/wazuh-admin-credentials.txt`).
+  - Threat Hunting / Security events: tim dang nhap quyen cao tu IP la -> ghi IP ke tan cong.
+  - Integrity Monitoring (FIM): thu muc/file nao bi thay doi (/etc/passwd, /root, /tmp)?
 
-Xong: checkwork / stoplab.
-Muc tieu: incident_resolved = Y  (da va CA HAI lo hong leo quyen).
+--- Task 2: Dung lai KILL CHAIN + TIMELINE (A2) ---
+  Dung dashboard (loc theo thoi gian) + auth.log tren target (sudo grep ... /var/log/auth.log):
+  - Tai khoan NAO bi chiem (dang nhap tu IP ke tan cong)? -> ghi vao COMPROMISED.
+  - No leo quyen bang duong nao? Tu kiem 2 huong: (a) file SUID bat thuong (goi y: `find`
+    voi -perm), (b) quyen sudo cua tai khoan do (goi y: liet ke quyen sudo; xem /etc/sudoers.d).
+    GHI RO CO CHE vao VECTOR1/VECTOR2 (vd "SUID /usr/bin/find", "sudo NOPASSWD awk") - khong chi 1 tu.
+  - TIMELINE: 3 moc tan cong xay ra o 3 THOI DIEM KHAC NHAU (cach nhau ~2'). Ghi GIO (HH:MM)
+    theo DUNG THU TU:
+    TIME_ACCESS   = luc tai khoan dang nhap dau tien tu IP ke tan cong ('Accepted ...').
+    TIME_ESCALATION = luc chay 'sudo ... awk' (su kien sudo trong log).
+    TIME_PERSIST  = luc tao tai khoan backdoor ('new user: ...' trong log).
+    *** Moi container dung chung mui gio voi VM (ICT) -> gio tren auth.log va tren dashboard
+        KHOP nhau. Grader cham theo gio trong auth.log tren target (dung sai +-1 phut).
+        Nhap bua se TRUOT. ***
+
+--- Task 3: Tim PERSISTENCE (ke tan cong cai NHIEU LOP du thua - tim HET) ---
+  Ke tan cong gioi khong chi cai 1 cua sau. Dung Integrity Monitoring (FIM) tren dashboard
+  (xem moi file bi them/sua) + soat tren target de tim DU CAC LOP sau:
+  - Tai khoan UID 0 la (ngoai 'root')? (goi y: loc truong UID trong /etc/passwd) -> ghi BACKDOOR.
+  - SSH key la trong /root/.ssh/authorized_keys? (cho phep vao thang root bang key)
+  - File SUID bat thuong NGOAI /usr/bin/find? (goi y: `find / -perm -4000` - co ban sao shell an khong?)
+  - Cronjob doc trong /etc/cron.d (hoac crontab)?
+  LUU Y: bo sot BAT KY lop nao -> ke tan cong van quay lai duoc. Phai go SACH ca 4 (Task 5).
+
+--- Task 4: CONTAINMENT (A3 - cach ly TRUOC) ---
+  Truoc khi don dep, CAT duong ke tan cong co the quay lai (vd dung SSH key da cai):
+  - Chan IP ke tan cong o tang mang (goi y: cong cu tuong lua iptables, luat DROP theo -s <IP>).
+  - Kiem chung: khong con PHIEN dang nhap moi tu IP do (auth.log). Luu y: cronjob doc la
+    persistence CUC BO - chan IP khong dung no; no chi dung khi bi GO o Task 5.
+
+--- Task 5: ERADICATION (go sach MOI mat xich - bo sot 1 la chua xong) ---
+  Bit 2 duong leo quyen:
+    a) Vo hieu hoa bit SUID tren find (goi y: cong cu doi quyen file).
+    b) Thu hoi quyen sudo nguy hiem (goi y: sua/xoa cau hinh trong /etc/sudoers.d/).
+  Go HET 4 lop persistence tim o Task 3:
+    c) Xoa tai khoan BACKDOOR UID 0. LUU Y: UID 0 thuong KHONG xoa duoc bang userdel thong
+       thuong (bao "used by process 1") - hay ep xoa hoac sua truc tiep file dinh nghia tai khoan.
+    d) Xoa dong SSH key la trong /root/.ssh/authorized_keys.
+    e) Xoa file SUID backdoor an (file ban tim o Task 3).
+    f) Xoa cronjob doc (/etc/cron.d).
+  Khoa foothold:
+    g) Khoa tai khoan nguoi dung bi chiem (goi y: khoa/doi mat khau).
+
+--- Task 6: Kiem chung & bao cao ---
+  Tu kiem chung: het SUID bat thuong; het sudo nguy hiem; het UID 0 la; IP da bi chan.
+  Hoan tat /home/analyst/findings.txt (COMPROMISED, IP, VECTOR1/2, BACKDOOR, 3 moc TIME_*).
+
+6. NOP BAI (SUBMISSION)
+--------------------------------------------------------------------------------
+  checkwork  -> tu kiem tra ;  stoplab -> nop bai.
+Tieu chi "incident_resolved = Y": da CONTAINMENT (chan IP) + ERADICATION day du (go 2 duong
+leo quyen SUID/sudo + go HET 4 lop persistence). Cac muc cham rieng:
+  - reported_iocs          : bao cao dung vector (co che), tai khoan, backdoor, IP cua CHINH MINH.
+  - timeline_reconstructed : 3 moc TIME_* khop GIO THAT trong log (+-1 phut) va dung thu tu.
+  - contained / foothold_locked / suid_fixed / sudo_fixed / persistence_removed : theo end-state.
+Luu y: checkwork chi cham VIEC BAN LAM - khong con muc nao "tu Y" khi lab vua khoi dong.

@@ -2,7 +2,7 @@
 # Labtainer Dockerfile - target (2 lo hong leo quyen + Wazuh agent)
 #
 ARG registry
-# Base co openssh-server (sshd) + rsyslog -> devuser/analyst SSH duoc
+# Base co openssh-server (sshd) + rsyslog -> emp<EMPNUM>/analyst SSH duoc
 FROM $registry/labtainer.network.ssh
 #
 ARG lab
@@ -16,13 +16,20 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
 # Cho prestop doc sudoers (440 root) khong mat khau
-RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/grep, /bin/grep, /usr/bin/cat, /bin/cat' > /etc/sudoers.d/labtainer-pe \
+RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/grep, /bin/grep, /usr/bin/cat, /bin/cat, /sbin/iptables, /usr/sbin/iptables' > /etc/sudoers.d/labtainer-pe \
     && chmod 440 /etc/sudoers.d/labtainer-pe
 #
-# Dam bao co sudo, findutils (find), mawk (awk)
-RUN apt-get update && apt-get install -y --no-install-recommends sudo findutils mawk \
+# Dam bao co sudo, findutils (find), mawk (awk), iptables (containment A3), cron (persistence B4)
+RUN apt-get update && apt-get install -y --no-install-recommends sudo findutils mawk iptables cron \
     && rm -rf /var/lib/apt/lists/* || true
+RUN systemctl enable cron 2>/dev/null || true
 #
 # --- Wazuh agent (bake, tro ve manager 172.20.0.20) ---
 RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg
