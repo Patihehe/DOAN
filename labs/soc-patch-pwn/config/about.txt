@@ -1,4 +1,6 @@
-SOC Lab KB5 - Patch & Pwn (Hybrid Blue + Red).
-Blue: he A cua ban dang bi tan cong command-injection lien tuc -> dieu tra qua SIEM va VA.
-Red: dung chinh ky thuat do de PWN he B (qua HTTP), lay flag.
-Muc tieu: A het bi dinh + lay duoc flag tu B.
+SOC Lab KB5 - Patch & Pwn (Hybrid Blue + Red) - web app "NoteBox" (MariaDB, co giao dien).
+Blue: he A dang bi tan cong UNION SQL injection (+ lo loi SQL) va Stored XSS -> dieu tra qua
+SIEM va VA ca hai, giu app chay dung.
+Red: he B la ban sao chua va. Chuoi: SQLi -> dump bang users -> crack mat khau admin (bam MD5
+yeu) -> dang nhap admin -> doc FLAG he thong; dong thoi cam Stored XSS -> xem admin panel ->
+cuop cookie admin (XSS flag). Nop ca 2 flag qua /submit.php tren he B.

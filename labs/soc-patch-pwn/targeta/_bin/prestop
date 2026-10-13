@@ -1,18 +1,36 @@
 #!/bin/bash
-# prestop he A (Blue): tu-test lenh inject co con chay khong + ping thuong con 200 khong.
+# prestop he A (Blue) = "checker": kiem qua HTTP (session cookie).
+#   - SLA  : dang nhap checker + dashboard + doc note cua minh -> app con chay dung
+#   - SQLi : UNION o /search.php co loi ra marker khong? (con lo hong?)
+#   - XSS  : note chua <script> co bi in RAW o /admin.php khong? (con lo hong?)
+# Checker dung tai khoan checkeradmin (CHI CO tren he A, vo dung voi he B) de xem admin panel.
+# Chi in co/OK, khong lo dap an.
 trap "echo Timed out; exit" SIGTERM
 
 echo "PRESTOP_MARKER_A"
-# ;id -> neu con dinh, body chua 'uid='
-echo "INJECT_UID=$(curl -s 'http://localhost/ping.php?host=127.0.0.1%3Bid' | grep -c 'uid=')"
-echo "NORMAL_PING=$(curl -s -o /dev/null -w '%{http_code}' 'http://localhost/ping.php?host=127.0.0.1')"
+B="http://localhost"
+Jc="/tmp/ckc.$$"; Ja="/tmp/cka.$$"; rm -f "$Jc" "$Ja"
 
-echo "=== modsec ==="
-grep -hE '^[[:space:]]*SecRuleEngine' /etc/modsecurity/modsecurity.conf 2>/dev/null
-grep -rhE 'SecRule' /etc/modsecurity 2>/dev/null | grep -vi recommended | tail -10
+# Dang nhap checker (user thuong)
+curl -s -c "$Jc" -b "$Jc" -L --data-urlencode "username=checker" --data-urlencode "password=checkerpw" "$B/login.php" >/dev/null 2>&1
+# SLA: dashboard (AUTH_OK) + doc note cua minh (id1 -> CHECKER_NOTE_OK)
+if curl -s -b "$Jc" "$B/dashboard.php" 2>/dev/null | grep -q 'AUTH_OK' && \
+   curl -s -b "$Jc" "$B/note.php?id=1" 2>/dev/null | grep -q 'CHECKER_NOTE_OK'; then echo "SLA_OK"; fi
+# SQLi: UNION tra ve marker
+curl -s -b "$Jc" "$B/search.php?q=zzz%27%20UNION%20SELECT%201%2C%27SQLIMARKER%27%20--%20" 2>/dev/null | grep -q 'SQLIMARKER' && echo "SQLI_OPEN"
+# XSS: note cua checker (id1) chua the <xsstest>. Kiem CA note.php (chinh chu) lan admin.php (admin)
+# -> con in RAW o BAT KY trang nao => con lo hong (buoc Blue phai escape o CA HAI noi hien body)
+XR=0
+curl -s -b "$Jc" "$B/note.php?id=1" 2>/dev/null | grep -q '<xsstest>XSSPROBE' && XR=1
+curl -s -c "$Ja" -b "$Ja" -L --data-urlencode "username=checkeradmin" --data-urlencode "password=checkeradminpw" "$B/login.php" >/dev/null 2>&1
+curl -s -b "$Ja" "$B/admin.php" 2>/dev/null | grep -q '<xsstest>XSSPROBE' && XR=1
+[ "$XR" = "1" ] && echo "XSS_OPEN"
+rm -f "$Jc" "$Ja"
 
-echo "=== access.log - command injection tu attacker (172.20.0.5) ==="
-sudo -n grep -iE 'ping.php.*(;|%3B|\||id|cat)' /var/log/apache2/access.log 2>/dev/null | grep '172.20.0.5' | tail -10
+# Bao cao Blue (chi in OK)
+F=/home/analyst/findings.txt
+grep '^ATTACKER_IP=' "$F" 2>/dev/null | grep -q '172.20.0.5' && echo "REP_IP_OK"
+grep '^VULN1=' "$F" 2>/dev/null | grep -qiE 'sql|injection|union|tiem' && echo "REP_V1_OK"
+grep '^VULN2=' "$F" 2>/dev/null | grep -qiE 'xss|cross|script|cookie' && echo "REP_V2_OK"
 
-echo "=== findings.txt ==="
-cat /home/analyst/findings.txt 2>/dev/null
+exit 0

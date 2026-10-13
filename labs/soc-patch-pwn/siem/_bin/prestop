@@ -1,10 +1,11 @@
 #!/bin/bash
-# prestop siem: chup bang chung Wazuh phat hien tan cong web (command injection) vao A.
+# prestop siem: chup bang chung Wazuh phat hien tan cong web (UNION SQLi + Stored XSS) vao he A.
+# (Khong con dung de cham diem - chi la bang chung forensic cho GVHD doc.)
 trap "echo Timed out; exit" SIGTERM
 
-echo "=== wazuh alerts (web / ping.php / 172.20.0.5) ==="
+echo "=== wazuh alerts (NoteBox: search.php UNION/information_schema, note <script>, tu 172.20.0.5) ==="
 sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
-  | grep -iE 'ping.php|command|injection|web|172.20.0.5' | tail -50
+  | grep -iE "search.php|union|select|information_schema|order by|script|register.php|172.20.0.5|web" | tail -50
 
 echo "=== agents ==="
 sudo -n /var/ossec/bin/agent_control -l 2>/dev/null

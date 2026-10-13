@@ -9,3 +9,6 @@ Thumbs.db
 
 # Log/artifact khi chay thu
 *.log
+
+# Bai giai mau (answer key) - chi giu local, khong len GitHub
+docs/giai-mau-*.md

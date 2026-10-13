@@ -1,5 +1,5 @@
 #
-# Labtainer Dockerfile - targeta (he A: web loi + Wazuh agent, SV va)
+# Labtainer Dockerfile - targeta (he A: NoteBox PHP + MariaDB + Wazuh agent, SV va)
 #
 ARG registry
 FROM $registry/labtainer.network.ssh
@@ -15,14 +15,16 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
-# Cho prestop doc access.log (640 root) khong mat khau
-RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/grep, /bin/grep, /usr/bin/cat, /bin/cat' > /etc/sudoers.d/labtainer-pp \
-    && chmod 440 /etc/sudoers.d/labtainer-pp
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
 #
-# Web stack + WAF + ping (iputils-ping cho ping.php)
-RUN apt-get update && ( \
-      apt-get install -y --no-install-recommends apache2 php libapache2-mod-php libapache2-mod-security2 curl iputils-ping \
-      || apt-get install -y --no-install-recommends apache2 libapache2-mod-php7.0 libapache2-mod-security2 curl iputils-ping \
+# Web stack NoteBox: apache + php + MariaDB
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && ( \
+      apt-get install -y --no-install-recommends apache2 php libapache2-mod-php php-mysql mariadb-server curl \
+      || apt-get install -y --no-install-recommends apache2 libapache2-mod-php7.0 php7.0-mysql mariadb-server curl \
     ) ; rm -rf /var/lib/apt/lists/*
 #
 # Wazuh agent (bake, tro ve manager 172.20.0.20)
@@ -33,6 +35,7 @@ RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.c
 RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent
 RUN systemctl enable wazuh-agent
 RUN systemctl enable apache2 2>/dev/null || true
+RUN systemctl enable mariadb 2>/dev/null || true
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /

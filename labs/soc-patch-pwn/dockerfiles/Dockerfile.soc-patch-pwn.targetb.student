@@ -1,5 +1,5 @@
 #
-# Labtainer Dockerfile - targetb (he B: web loi, chi HTTP, SV pwn lay flag)
+# Labtainer Dockerfile - targetb (he B: NoteBox PHP + MariaDB, chi HTTP, SV pwn lay flag)
 #
 ARG registry
 FROM $registry/labtainer.network
@@ -15,12 +15,19 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
-# Web stack + ping (khong Wazuh, khong modsec, khong SSH -> chi vao duoc qua HTTP)
-RUN apt-get update && ( \
-      apt-get install -y --no-install-recommends apache2 php libapache2-mod-php iputils-ping \
-      || apt-get install -y --no-install-recommends apache2 libapache2-mod-php7.0 iputils-ping \
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# Web stack NoteBox + MariaDB (khong Wazuh, khong SSH)
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && ( \
+      apt-get install -y --no-install-recommends apache2 php libapache2-mod-php php-mysql mariadb-server curl \
+      || apt-get install -y --no-install-recommends apache2 libapache2-mod-php7.0 php7.0-mysql mariadb-server curl \
     ) ; rm -rf /var/lib/apt/lists/*
 RUN systemctl enable apache2 2>/dev/null || true
+RUN systemctl enable mariadb 2>/dev/null || true
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /

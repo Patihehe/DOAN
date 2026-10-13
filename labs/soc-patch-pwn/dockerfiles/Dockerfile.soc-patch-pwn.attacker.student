@@ -1,5 +1,5 @@
 #
-# Labtainer Dockerfile - attacker (command injection tu dong, an)
+# Labtainer Dockerfile - attacker (khai thac SQLi + Stored XSS tu dong, an)
 #
 ARG registry
 FROM $registry/labtainer.network
@@ -14,6 +14,12 @@ ARG version
 LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
+#
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
 #
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/* || true

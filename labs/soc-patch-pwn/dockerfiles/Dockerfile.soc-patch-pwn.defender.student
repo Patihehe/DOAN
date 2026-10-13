@@ -16,10 +16,18 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
-# Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
-# apt-get update || true: tranh fail cung khi kho ben thu 3 (mozilla) sync do - openssh lay tu kho Ubuntu chinh
-RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client curl \
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# Firefox co san trong base firefox3; them ssh client + curl + python3 (C2 listener cho XSS)
+# apt-get update || true: tranh fail cung khi kho ben thu 3 (mozilla) sync do - cac goi lay tu kho Ubuntu chinh
+RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client curl python3 \
     && rm -rf /var/lib/apt/lists/*
+# john de crack MD5 (best-effort: neu kho thieu 'universe' thi bo qua, SV dung md5sum thay the)
+RUN apt-get update || true; apt-get install -y --no-install-recommends john && rm -rf /var/lib/apt/lists/* || true
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /

