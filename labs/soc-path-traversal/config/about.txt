@@ -1,0 +1,3 @@
+SOC Lab 4 - Phong thu Quet thu muc & Path Traversal (chmod/chown + Snort IDS).
+Ke tan cong tu dong quet thu muc (dirb) va khai thac Path Traversal (/../../../../etc/passwd).
+Nhiem vu: Phat hien qua SIEM, phan quyen thu muc nhay cam va viet rule Snort IDS canh bao.

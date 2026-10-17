@@ -1,0 +1,43 @@
+=== SOC Lab 4: Phong thu Quet thu muc & Path Traversal (Snort IDS + Wazuh SIEM) ===
+
+Ke tan cong (172.20.0.5) dang su dung cong cu quet thu muc (dirb) do tim cac thu muc an tren
+may chu Web "target" (172.20.0.10), ket hop khai thac lo hong Path Traversal tren endpoint
+/view.php?file=../../../../etc/passwd va truy cap trai phep thu muc nhay cam /secret_SECID/.
+
+Nhiem vu cua ban: DIEU TRA tren SIEM va UNG PHO tu tram DEFENDER.
+
+--- 1) Giam sat tren SIEM (Dashboard Firefox tren Defender) ---
+  https://172.20.0.20   (admin / xem pass trong /root/wazuh-admin-credentials.txt tren siem)
+  -> Threat Hunting: Quan sat log truy cap Web (/var/log/apache2/access.log):
+     - Hang loat ma loi 404 (Not Found) do cong cu quet thu muc sinh ra.
+     - Cac truy van 200 (OK) doc trai phep /secret_SECID/ va chuoi "/../../../../etc/passwd".
+
+--- 2) Dieu tra & Ung pho (SSH tu defender sang target) ---
+  ssh analyst@target            (mat khau: analyst)
+
+  a. Phan quyen thu muc nhay cam (Chan truy cap Web):
+     Thu muc /var/www/html/secret_SECID dang bi de quyen 755 (ai cung doc duoc qua Web).
+     Hay thu hoi quyen doc cua others/www-data va doi chu so huu ve root:
+       sudo chown -R root:root /var/www/html/secret_SECID
+       sudo chmod 700 /var/www/html/secret_SECID
+
+  b. Thiet lap Rule IDS (Snort) canh bao luong du lieu Path Traversal:
+     Mo file rule local cua Snort:
+       sudo nano /etc/snort/rules/local.rules
+     Them rule phat hien chuoi "../" hoac "etc/passwd" tren cong HTTP 80 (vi du):
+       alert tcp any any -> any 80 (msg:"Path Traversal Attempt Detected"; content:"../"; sid:1000001; rev:1;)
+       alert tcp any any -> any 80 (msg:"Etc Passwd Access Attempt"; content:"etc/passwd"; sid:1000002; rev:1;)
+
+     Khoi dong lai Snort IDS de ap dung rule:
+       sudo systemctl restart snort || sudo service snort restart
+
+--- 3) Kiem chung ---
+  - Truy cap thu muc nhay cam phai bi tu choi (403 Forbidden):
+      curl -I http://localhost/secret_SECID/
+  - Trang chu Web chinh van phai hoat dong binh thuong (200 OK):
+      curl -I http://localhost/index.html
+  - Kiem tra Snort da bat dau ghi canh bao:
+      sudo tail -f /var/log/snort/alert
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (Da khoa quyen thu muc nhay cam + Rule Snort hoat dong + Web song).

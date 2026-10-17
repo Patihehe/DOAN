@@ -1,0 +1,35 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== 1. Check Secret Folder Permissions ==="
+for d in /var/www/html/secret_*; do
+  if [ -d "$d" ]; then
+    PERM=$(stat -c "%a" "$d" 2>/dev/null)
+    OWNER=$(stat -c "%U:%G" "$d" 2>/dev/null)
+    echo "DIR:$d PERM:$PERM OWNER:$OWNER"
+    # Kiem tra HTTP status khi truy cap thu muc nhay cam
+    BNAME=$(basename "$d")
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost/$BNAME/credentials.txt" 2>/dev/null)
+    echo "SECRET_HTTP_CODE:$CODE"
+  fi
+done
+
+echo "=== 2. Check Snort Local Rules ==="
+sudo -n cat /etc/snort/rules/local.rules 2>/dev/null
+
+echo "=== 3. Check Snort Alerts ==="
+sudo -n tail -n 50 /var/log/snort/alert 2>/dev/null
+
+echo "=== 4. Check Apache Access Log ==="
+sudo -n tail -n 50 /var/log/apache2/access.log 2>/dev/null
+
+echo "=== 5. Check Main Web Service Alive ==="
+MAIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost/index.html" 2>/dev/null)
+if [ "$MAIN_CODE" = "200" ]; then
+  echo "WEB_SERVICE_ALIVE_OK"
+else
+  echo "WEB_SERVICE_DOWN:$MAIN_CODE"
+fi
