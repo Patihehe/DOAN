@@ -41,10 +41,11 @@ Mỗi bước phải **chạy được + chấm điểm được** trước khi 
 
 **Nhóm 2 — Ứng dụng web (L7)**
 3. SQL Injection tự động → viết rule ModSecurity (WAF)
-4. Quét thư mục & Path traversal → phân quyền + rule Snort (IDS)
+4. Quét thư mục & Path traversal → phân quyền + rule Snort (IDS)  ✅ (lab `soc-path-traversal`)
 
-**Nhóm 3 — Khai thác & mã độc (host-based)**
+**Nhóm 3 — Khai thác & mã độc / Rò rỉ dữ liệu (host & network)**
 5. Persistence & reverse shell → threat hunting, kill process, xóa cronjob
+6. DNS Tunneling / Data Exfiltration → chặn DNS C2, diệt tiến trình exfil, bảo vệ file nhạy cảm  ✅ (lab `soc-dns-exfil`)
 
 **Hybrid — "Patch & Pwn"** (50% phòng thủ + 50% tấn công có kiểm soát)
 
@@ -57,8 +58,12 @@ THI_DOAN/
 ├── labs/                      # Các lab Labtainers (đồng bộ sang VM)
 │   ├── soc-ssh-defense/       # Lab 1: SSH Brute-force & Persistence
 │   ├── soc-ddos/              # Lab 2: SYN Flood / DDoS Rate Limiting
-│   ├── install-soc-ssh-defense.sh # Script cài đặt Lab 1
-│   ├── install-soc-ddos.sh    # Script cài đặt Lab 2
+│   ├── soc-path-traversal/    # Lab 4: Quét thư mục & Path Traversal (Snort IDS)
+│   ├── soc-dns-exfil/         # Lab 5: DNS Tunneling & Data Exfiltration
+│   ├── install-soc-ssh-defense.sh    # Script cài đặt Lab 1
+│   ├── install-soc-ddos.sh           # Script cài đặt Lab 2
+│   ├── install-soc-path-traversal.sh # Script cài đặt Lab 4
+│   ├── install-soc-dns-exfil.sh      # Script cài đặt Lab 5
 │   ├── make-soc-wazuh.sh      # Script đóng gói Shared SIEM Image
 │   └── apply-shared-siem.sh   # Script chuyển đổi SIEM dùng chung
 └── templates/                 # start.config mẫu lấy từ lab có sẵn (tham khảo)

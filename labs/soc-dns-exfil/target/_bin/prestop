@@ -1,0 +1,34 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== 1. Check iptables OUTPUT / INPUT Rules ==="
+sudo -n iptables -S 2>/dev/null
+
+echo "=== 2. Check Exfil Process & Script / Cron ==="
+if pgrep -f "\.dns_exfil\.sh" >/dev/null 2>&1; then
+  echo "EXFIL_PROC_RUNNING"
+else
+  echo "EXFIL_PROC_STOPPED"
+fi
+
+if [ -f /usr/local/bin/.dns_exfil.sh ] || [ -f /etc/cron.d/dns-sync ]; then
+  echo "EXFIL_PERSISTENCE_PRESENT"
+else
+  echo "EXFIL_PERSISTENCE_REMOVED"
+fi
+
+echo "=== 3. Check Sensitive File Protection ==="
+if [ -f /opt/company/secret_vault.txt ]; then
+  PERM=$(stat -c "%a" /opt/company/secret_vault.txt 2>/dev/null)
+  OWNER=$(stat -c "%U:%G" /opt/company/secret_vault.txt 2>/dev/null)
+  echo "VAULT_PERM:$PERM OWNER:$OWNER"
+else
+  # Neu sinh vien da ma hoa thanh secret_vault.txt.enc / .gpg va xoa ban ro
+  echo "VAULT_PERM:600 OWNER:root:root ENCRYPTED"
+fi
+
+echo "=== 4. Check DNS Query Log Sample ==="
+sudo -n tail -n 20 /var/log/dns-queries.log 2>/dev/null

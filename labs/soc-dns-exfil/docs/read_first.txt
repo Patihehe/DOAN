@@ -1,0 +1,44 @@
+=== SOC Lab 5: Phong thu DNS Tunneling / Data Exfiltration (Wazuh SIEM) ===
+
+Mot ma doc an tren may "target" (172.20.0.10) dang am tham doc file du lieu bi mat
+(/opt/company/secret_vault.txt va /etc/passwd). Do tuong lua da chan ket noi HTTP/SSH ra ngoai,
+ma doc ma hoa tung dong du lieu thanh chuoi Base64 va gui len ra ngoai thong qua cac cau truy van
+DNS Subdomain: <base64_chunk>.exfil-EXID.attacker.com ve may chu DNS ma (172.20.0.5).
+
+Nhiem vu cua ban: DIEU TRA tren SIEM va UNG PHO tu tram DEFENDER.
+
+--- 1) Giam sat tren SIEM (Dashboard Firefox tren Defender) ---
+  https://172.20.0.20   (admin / xem pass trong /root/wazuh-admin-credentials.txt tren siem)
+  -> Threat Hunting: Quan sat log truy van DNS (/var/log/dns-queries.log tren target):
+     - Phat hien tan suat truy van DNS tang vot voi cac subdomain cuc ky dai (chuoi Base64).
+     - Xac dinh ten mien ma doc su dung (exfil-EXID.attacker.com) va IP Server DNS ma (172.20.0.5).
+
+--- 2) Dieu tra & Ung pho (SSH tu defender sang target) ---
+  ssh analyst@target            (mat khau: analyst)
+
+  a. Chan Server DNS ma bang iptables (Chan ca UDP & TCP port 53 toi 172.20.0.5):
+       sudo iptables -A OUTPUT -d 172.20.0.5 -p udp --dport 53 -j DROP
+       sudo iptables -A OUTPUT -d 172.20.0.5 -p tcp --dport 53 -j DROP
+     (Hoac chan toan bo ket noi toi IP DNS ma: sudo iptables -A OUTPUT -d 172.20.0.5 -j DROP)
+
+  b. Tim va diet tien trinh + script ma doc rut du lieu ngam:
+     - Kiem tra tien trinh hoac cronjob dang chay:
+         ps aux | grep dns
+         ls -la /etc/cron.d/ /tmp/ /var/tmp/
+     - Xoa cronjob va kill script ma doc (/usr/local/bin/.dns_exfil.sh):
+         sudo rm -f /etc/cron.d/dns-sync /usr/local/bin/.dns_exfil.sh
+         sudo pkill -f .dns_exfil.sh
+
+  c. Bao ve file du lieu nhay cam (/opt/company/secret_vault.txt):
+     File /opt/company/secret_vault.txt dang bi de quyen 644 (world-readable).
+     Hay doi chu so huu ve root va siet quyen 600 (chi root moi doc duoc):
+       sudo chown root:root /opt/company/secret_vault.txt
+       sudo chmod 600 /opt/company/secret_vault.txt
+
+--- 3) Kiem chung ---
+  - Kiem tra iptables da co rule DROP toi 172.20.0.5.
+  - Kiem tra tien trinh .dns_exfil.sh khong con chay.
+  - Kiem tra quyen file /opt/company/secret_vault.txt la 600.
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (Da chan DNS C2 + Diet ma doc exfil + Khoa quyen file bi mat).

@@ -1,0 +1,3 @@
+SOC Lab 5 - Phong thu DNS Tunneling & Data Exfiltration (Ro ri du lieu qua DNS).
+Ma doc tren Target ma hoa du lieu nhay cam thanh Base64 va gui len ra ngoai qua truy van DNS Subdomain.
+Nhiem vu: Phat hien ten mien & IP DNS ma tren SIEM, chan DNS C2, diet tien trinh va bao ve file nhay cam.
