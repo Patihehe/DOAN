@@ -45,13 +45,15 @@ Nhờ đó image `siem`/`defender` **dùng chung** giữa các lab (Docker cache
 
 Tổ chức thành nhiều lab cùng chia sẻ nền tảng:
 ```
-soc-ssh-defense     (KB1 - đã xong, làm BẢN MẪU)
-soc-ddos            (KB2 - SYN flood)
-soc-web-sqli        (KB3 - SQLi/WAF)
-soc-threat-hunt     (KB - reverse shell/persistence)
-soc-patch-pwn       (Hybrid)
+soc-ssh-defense     (Lab 1 - SSH brute-force IR, BẢN MẪU)      đã xong
+soc-sqli-waf        (SQLi + WAF/ModSecurity)                    đã xong
+soc-threathunt      (reverse shell + threat hunting)            đã xong
+soc-privesc         (leo thang dac quyen + dieu tra IR)         đã xong
+soc-patch-pwn       (Hybrid NoteBox: UNION SQLi + Stored XSS)   đã xong
 ```
 Tất cả dùng chung `siem` (Wazuh) + `defender` + khung chấm điểm; chỉ khác `attacker`/`target`.
+`siem` nay dùng chung **ảnh nền `soc-wazuh`** (chạy `apply-shared-siem.sh` cho lab mới —
+xem `huong-dan-toi-uu-dung-luong.md`).
 
 > Đây cũng là **một luận điểm mạnh cho báo cáo**: đồ án không chỉ tạo 1 bài lab, mà xây một
 > **khung/nền tảng SOC tái sử dụng** để sinh ra nhiều bài lab phòng thủ có chấm điểm trên Labtainers.

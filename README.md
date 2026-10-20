@@ -30,33 +30,43 @@ Mỗi bước phải **chạy được + chấm điểm được** trước khi 
       Wazuh tự cài trên siem lúc first-boot → chỉ `labtainer soc-ssh-defense` là cả SOC tự lên.
 - [x] **Bước 3 — Tách `defender`:** ✅ HOÀN THÀNH. Container `defender` (base firefox3)
       xem dashboard Wazuh bằng Firefox → **đủ kiến trúc 4 container chạy thật trên VM**.
-- [ ] **Bước 4 — Mở rộng kịch bản:** SQLi/WAF, Path traversal/Snort,
-      Reverse shell/persistence → rồi kịch bản Hybrid "Patch & Pwn".
+- [x] **Bước 4 — Mở rộng kịch bản:** ✅ ĐÃ CÓ **5 lab** chạy & chấm điểm được —
+      `soc-ssh-defense`, `soc-sqli-waf`, `soc-threathunt`, `soc-privesc`, `soc-patch-pwn`.
+- [x] **Tối ưu dung lượng:** ✅ mọi `siem` dùng chung ảnh nền `soc-wazuh` (tiết kiệm ~15.9GB/lab) —
+      xem [docs/huong-dan-toi-uu-dung-luong.md](docs/huong-dan-toi-uu-dung-luong.md).
 
 ## Danh mục kịch bản (theo gợi ý của thầy)
 
 **Nhóm 1 — Dò quét & truy cập trái phép (mạng/hệ thống)**
-1. SSH/FTP brute-force → chặn bằng iptables/Fail2ban  ✅ (lab `soc-ssh-defense`)
-2. SYN flood/DDoS nhỏ → rate limiting (iptables/sysctl)  ✅ (lab `soc-ddos`, clone từ lab 1 — chứng minh tái sử dụng)
+1. SSH brute-force → chặn bằng iptables  ✅ `soc-ssh-defense`
+2. SYN flood/DDoS nhỏ → rate limiting (iptables/sysctl)  ⏳ dự kiến
 
 **Nhóm 2 — Ứng dụng web (L7)**
-3. SQL Injection tự động → viết rule ModSecurity (WAF)
-4. Quét thư mục & Path traversal → phân quyền + rule Snort (IDS)
+3. SQL Injection tự động → viết rule ModSecurity (WAF)  ✅ `soc-sqli-waf`
+4. Quét thư mục & Path traversal → phân quyền + rule Snort (IDS)  ⏳ dự kiến
 
 **Nhóm 3 — Khai thác & mã độc (host-based)**
-5. Persistence & reverse shell → threat hunting, kill process, xóa cronjob
+5. Persistence & reverse shell → threat hunting, kill process, xóa cronjob  ✅ `soc-threathunt`
+6. Leo thang dac quyen → điều tra + hardening (IR)  ✅ `soc-privesc`
 
-**Hybrid — "Patch & Pwn"** (50% phòng thủ + 50% tấn công có kiểm soát)
+**Hybrid — "Patch & Pwn"** (50% phòng thủ + 50% tấn công có kiểm soát)  ✅ `soc-patch-pwn` (NoteBox: UNION SQLi + Stored XSS)
 
 ## Cấu trúc thư mục
 
 ```
 THI_DOAN/
 ├── README.md                  # File này
-├── docs/                      # Tài liệu kế hoạch, hướng dẫn
-├── labs/                      # Các lab Labtainers (đồng bộ sang VM)
-│   └── soc-ssh-defense/       # Lab Bước 1
-└── templates/                 # start.config mẫu lấy từ lab có sẵn (tham khảo)
+├── docs/                      # Tài liệu kế hoạch, hướng dẫn, chuẩn chất lượng
+├── labs/                      # Các lab Labtainers + script (đồng bộ sang VM)
+│   ├── soc-ssh-defense/       # Lab 1 - SSH brute-force IR (bản mẫu)
+│   ├── soc-sqli-waf/          # SQLi + WAF (ModSecurity)
+│   ├── soc-threathunt/        # Reverse shell + threat hunting
+│   ├── soc-privesc/           # Leo thang dac quyen + IR
+│   ├── soc-patch-pwn/         # Hybrid "Patch & Pwn" (NoteBox)
+│   ├── make-soc-wazuh.sh      # Dựng ảnh nền Wazuh dùng chung
+│   ├── apply-shared-siem*.sh  # Chuyển siem sang ảnh chung
+│   └── optimize-disk.sh       # Dọn dung lượng VM
+└── templates/                 # start.config mẫu (tham khảo)
 ```
 
 ## Nguyên tắc an toàn (quan trọng)

@@ -1,5 +1,8 @@
 # Tối ưu dung lượng cho nhiều lab (10 lab dùng chung Wazuh)
 
+> ✅ **ĐÃ TRIỂN KHAI** — phương án ảnh nền Wazuh dùng chung đã hiện thực hoá. Quy trình thực tế
+> + lệnh + checklist xem ở **`huong-dan-toi-uu-dung-luong.md`**. File này giữ làm phân tích cho báo cáo.
+
 ## Vấn đề
 10 lab × ~13 GB = ~130 GB. Sinh viên không tải nổi.
 
