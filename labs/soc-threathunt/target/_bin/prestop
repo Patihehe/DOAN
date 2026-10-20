@@ -1,22 +1,25 @@
 #!/bin/bash
-# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
-# Tat ca world-readable nen khong can sudo.
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (cham diem).
+# Chi in co/OK, KHONG lo IOC (IP/cong/ten) -> tranh SV doc prestop.stdout de chep dap an.
 trap "echo Timed out; exit" SIGTERM
 
 echo "PRESTOP_MARKER"
 
-echo "=== cron (persistence) ==="
-{ cat /etc/cron.d/* 2>/dev/null; sudo -n crontab -l -u root 2>/dev/null; } \
-  | grep -iE 'sysupdate|dev/tcp' | sed 's/^/CRONLINE: /'
+# Containment: da CHAN IP C2 (.5) bang iptables chua? -> chan la hanh dong containment.
+# (Cham theo LUAT, khong dem ket noi 'ss': iptables DROP de ket noi ESTABLISHED con dinh
+#  vai phut cho timeout -> dem ket noi se bao sai 'chua chan' du SV da chan dung.)
+sudo -n iptables -S 2>/dev/null | grep -qE '172\.20\.0\.5(/32)?.*-j (DROP|REJECT)' && echo "CONTAINED"
 
-echo "SCRIPT_STAT=$(stat -c '%a %n' /usr/local/bin/.sysupdate 2>/dev/null || echo MISSING)"
+# SLA: ket noi lanh tinh toi SIEM (.20) con song? (khong chan bua lam dut giam sat)
+SL=$(ss -tn 2>/dev/null | grep -c '172.20.0.20:')
+[ "${SL:-0}" -ge 1 ] && echo "SLA_OK"
 
-echo "=== tien trinh nghi ngo ==="
-ps -ef 2>/dev/null | grep -E 'sysupdate|/dev/tcp' | grep -v grep | sed 's/^/PROC: /'
+# Bao cao IOC (chi in OK). Cong ky vong lay tu CHINH dong beacon trong log giam sat
+# (/var/log/netmon.log, 644 - world readable; cong von la IOC phai san ra, khong phai bi mat).
+F=/home/analyst/findings.txt
+grep '^C2_IP=' "$F" 2>/dev/null | grep -q '172.20.0.5' && echo "REP_IP_OK"
+TP=$(grep 'dst=172.20.0.5' /var/log/netmon.log 2>/dev/null | grep -oE 'dport=[0-9]+' | grep -oE '[0-9]+' | head -1)
+[ -n "$TP" ] && grep '^C2_PORT=' "$F" 2>/dev/null | grep -q "$TP" && echo "REP_PORT_OK"
+grep '^MAL_PROC=' "$F" 2>/dev/null | grep -qi 'kworker' && echo "REP_PROC_OK"
 
-echo "C2_CONN=$(ss -tn 2>/dev/null | grep -c '172.20.0.5:')"
-
-echo "=== findings.txt (bao cao analyst) ==="
-cat /home/analyst/findings.txt 2>/dev/null
-
-echo "=== (GV doi chieu) IOC that: script=/usr/local/bin/.sysupdate ; cron=/etc/cron.d/sysupdate (moi phut) ; C2=172.20.0.5 ==="
+exit 0

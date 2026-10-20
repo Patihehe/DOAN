@@ -15,6 +15,12 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
 # python3 de chay C2 listener (socket trong thu vien chuan, khong can pip)
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/* || true
