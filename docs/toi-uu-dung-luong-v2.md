@@ -1,5 +1,9 @@
 # Tối ưu dung lượng nhiều lab — Phân tích phương án (bản nghiên cứu)
 
+> ✅ **ĐÃ TRIỂN KHAI** — nhóm đã chọn phương án **ảnh nền Wazuh dùng chung** (qua local
+> registry). Quy trình thực tế + lệnh + checklist xem ở **`huong-dan-toi-uu-dung-luong.md`**.
+> File này giữ lại làm phần phân tích/so sánh phương án cho báo cáo.
+
 ## Vấn đề
 10 lab × ~13GB (container siem cài Wazuh runtime) ≈ 130GB → tràn đĩa khi phát triển/phát hành.
 

@@ -113,3 +113,6 @@ Mỗi container có 1 thư mục cùng tên. Bên trong, Labtainers hiểu các 
 
 **Giữ nguyên (dùng lại):** container `siem` (Wazuh) + `defender`, cơ chế bake, khung chấm điểm.
 Xem [kien-truc-tai-su-dung.md](kien-truc-tai-su-dung.md).
+
+> Lưu ý tối ưu: `siem` nay **dùng chung ảnh nền `soc-wazuh`** (không tự cài lại Wazuh mỗi lab).
+> Lab mới chạy `apply-shared-siem.sh` — xem [huong-dan-toi-uu-dung-luong.md](huong-dan-toi-uu-dung-luong.md).
