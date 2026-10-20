@@ -308,11 +308,11 @@ RUN apt-get update && ( \
     ) ; rm -rf /var/lib/apt/lists/*
 #
 # --- Wazuh agent (bake luc build, tro ve manager 172.20.0.20) ---
-RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg
+RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg && rm -rf /var/lib/apt/lists/*
 RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
     && chmod 644 /usr/share/keyrings/wazuh.gpg
 RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list
-RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent
+RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent && rm -rf /var/lib/apt/lists/*
 RUN systemctl enable wazuh-agent
 RUN systemctl enable apache2 2>/dev/null || true
 #
@@ -603,7 +603,6 @@ cat > "$LAB/target/_bin/treataslocal" <<'__EOF_SQLI_9z3k__'
 apache2
 modsecurity
 __EOF_SQLI_9z3k__
-
 echo ">> Cap quyen thuc thi + chuan hoa EOL (LF)"
 chmod +x "$LAB"/attacker/_bin/*.sh "$LAB"/target/_bin/* "$LAB"/siem/_bin/* "$LAB"/defender/_bin/*.sh "$LAB"/siem/*.sh "$LAB"/attacker/*.py 2>/dev/null || true
 find "$LAB" -type f -exec sed -i 's/\r$//' {} +

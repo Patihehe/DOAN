@@ -28,14 +28,14 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/sbin/iptables, /sbin/iptables, /usr/sbi
     && chmod 440 /etc/sudoers.d/labtainer-iptables
 #
 # cron: can cho kich ban persistence (attacker cai cronjob) + prestop doc crontab
-RUN apt-get update && apt-get install -y --no-install-recommends cron || true
+RUN apt-get update && apt-get install -y --no-install-recommends cron ; rm -rf /var/lib/apt/lists/* || true
 #
 # --- Wazuh agent (bake luc build, tro ve manager 172.20.0.20) ---
-RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg
+RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg && rm -rf /var/lib/apt/lists/*
 RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
     && chmod 644 /usr/share/keyrings/wazuh.gpg
 RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list
-RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent
+RUN apt-get update && WAZUH_MANAGER="172.20.0.20" apt-get install -y wazuh-agent && rm -rf /var/lib/apt/lists/*
 RUN systemctl enable wazuh-agent
 #
 # Install the system files found in the _system directory
