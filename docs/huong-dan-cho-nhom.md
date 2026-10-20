@@ -42,7 +42,9 @@ Rồi **chỉ sửa 4 chỗ** (theo `docs/de-xuat-kich-ban.md` + `docs/giai-thic
 2. `target/` (+ Dockerfile target) — dịch vụ lỗ hổng + rule phát hiện.
 3. `instr_config/results.config` + `goals.config` — tiêu chí chấm điểm.
 4. `docs/read_first.txt` — đề bài.
-Giữ nguyên `siem` (Wazuh) + `defender`.
+Giữ nguyên `defender`. Với `siem`: **KHÔNG để nó tự cài lại Wazuh** — sau khi build xong,
+chạy `apply-shared-siem.sh soc-<ten-lab-cua-ban>` để dùng chung ảnh `soc-wazuh`
+(tiết kiệm ~15.9GB/lab). Chi tiết + **Checklist lab mới**: `docs/huong-dan-toi-uu-dung-luong.md`.
 
 Build & test: `rebuild soc-<ten-lab-cua-ban>` → `checkwork`.
 
@@ -73,11 +75,18 @@ lấy bản mới: `git pull`.
 
 ## 7. Lưu ý dung lượng (quan trọng)
 
-Mỗi lab chạy Wazuh tốn ~13GB (container). Khi phát triển:
-- Mỗi lúc chỉ giữ 1-2 lab; xong thì `stoplab` + `docker rm` container lab không dùng.
-- Đừng để nhiều lab cùng tồn tại kẻo tràn đĩa.
-- Việc **tối ưu dung lượng dùng chung Wazuh** để làm 1 lần ở khâu đóng gói cuối
-  (hướng chuẩn: Docker VOLUME / ảnh wazuh chính thức — xem `docs/toi-uu-dung-luong-v2.md`).
+**Tối ưu dùng chung Wazuh ĐÃ triển khai xong** (không còn là việc "để sau"): tất cả siem
+dùng chung 1 ảnh `soc-wazuh` thay vì mỗi lab tự cài Wazuh ~15.9GB → lab mới chỉ tốn thêm
+vài trăm MB (lớp app riêng).
+
+**Bắt buộc với lab mới:** sau khi build, chạy `apply-shared-siem.sh soc-<ten-lab>` cho siem.
+Toàn bộ cách dựng ảnh chung, chuyển lab cũ sang, và **Checklist lab mới** xem ở
+`docs/huong-dan-toi-uu-dung-luong.md`.
+
+Dọn ổ khi cần:
+- `bash labs/optimize-disk.sh` (phần an toàn) + `docker container prune -f` (thu nhiều nhất,
+  chỉ khi không còn lab đang làm dở).
+- ⚠️ **KHÔNG** `docker system prune -a` / `docker image prune -a` → xoá sạch lab.
 
 ## 8. Danh mục tài liệu trong repo (đọc khi cần)
 - `giai-thich-kien-truc-lab.md` — hiểu cấu trúc & vòng đời lab.
@@ -86,4 +95,6 @@ Mỗi lab chạy Wazuh tốn ~13GB (container). Khi phát triển:
 - `labtainers-designer.md` — cơ chế designer của Labtainers.
 - `huong-dan-dong-bo.md` — đồng bộ file ↔ VM.
 - `khao-sat-lien-quan.md` — công trình liên quan (cho báo cáo).
-- `toi-uu-dung-luong-v2.md` — phương án tối ưu dung lượng (giai đoạn đóng gói).
+- `huong-dan-toi-uu-dung-luong.md` — **(QUAN TRỌNG)** dùng chung ảnh Wazuh + chuyển lab cũ + checklist lab mới (ĐÃ triển khai).
+- `chuan-chat-luong-lab.md` — chuẩn chất lượng + chấm điểm rigor.
+- `toi-uu-dung-luong-v2.md` — phương án tối ưu ban đầu (nay đã hiện thực hoá bằng 2 file trên).
