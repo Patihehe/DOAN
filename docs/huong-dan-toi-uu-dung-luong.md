@@ -3,6 +3,12 @@
 > Mục tiêu: mỗi lab SIEM không còn tự cài Wazuh 15.9GB riêng, mà **tất cả dùng chung 1 ảnh
 > `soc-wazuh`**. 5 lab chỉ tốn ~1 bản Wazuh thay vì 5×15.9GB.
 
+**Tài liệu này gồm:**
+- **Bước 1** — Dựng ảnh Wazuh dùng chung (mỗi người 1 lần).
+- **Bước 2** — Chuyển lab **CÁCH CŨ** (siem tự cài Wazuh) sang dùng ảnh chung.
+- **Bước 3** — **Tạo lab MỚI** từ bản mẫu (đã tối ưu sẵn) — đầy đủ từ mô tả → commit.
+- **Bước 4** — Dọn ổ · Kiểm tra · **Checklist LAB MỚI** (cuối tài liệu).
+
 ## ⚠️ Nguyên tắc quan trọng nhất
 - **Docker image nằm CỤC BỘ trên từng VM.** Git chỉ chia sẻ **code** (script + Dockerfile),
   **KHÔNG** chia sẻ image. → Mỗi người phải **tự dựng `soc-wazuh` một lần** trên VM của mình.
@@ -64,12 +70,59 @@ bash apply-shared-siem-all.sh
 
 ---
 
-## Bước 3 — Chuẩn cho lab MỚI (làm từ đầu)
-- **Siem**: build bình thường rồi chạy `apply-shared-siem.sh <lab>`, hoặc dùng luôn template
-  `FROM localhost:5000/soc-wazuh`.
-- **Mọi `RUN apt-get install ...`**: thêm `&& rm -rf /var/lib/apt/lists/*` ở **cuối cùng của
-  đúng RUN đó** (dọn ở RUN sau vô ích vì layer trước đã ghi rồi).
-- Base nhẹ sẵn có: `network`/`network.ssh` (attacker/target), `firefox3` (defender xem dashboard).
+## Bước 3 — Tạo lab MỚI (từ bản mẫu, đã tối ưu sẵn)
+
+> Mỗi lab mới **nhân từ `soc-ssh-defense`** rồi chỉ sửa phần kịch bản; `siem`/`defender` dùng lại.
+
+### 3.1 Mô tả kịch bản TRƯỚC khi code
+Viết rõ: tấn công gì · lỗ hổng gì ở target · SV phải làm gì · **chấm theo tiêu chí nào**
+→ gửi nhóm duyệt (quy tắc bắt buộc, tránh làm xong mới sửa).
+
+### 3.2 Nhân lab từ bản mẫu
+```bash
+cd $LABTAINER_DIR/labs/soc-ssh-defense
+new_lab_setup.py -c soc-<ten-lab>      # clone 4 container + Wazuh + khung chấm điểm
+cd ../soc-<ten-lab>
+```
+
+### 3.3 Sửa 4 phần nội dung (giữ nguyên `defender`)
+1. `attacker/attack.sh` (+ Dockerfile attacker) — cách tấn công của kịch bản.
+2. `target/` (+ Dockerfile target) — dịch vụ lỗ hổng + `wazuh-agent` + sudoers cho `prestop`.
+3. `instr_config/results.config` + `goals.config` — tiêu chí chấm (chỉ chấm việc SV làm, khớp thực tế).
+4. `docs/read_first.txt` — đề bài.
+
+**Lưu ý khi sửa (để không phá tối ưu + khớp Wazuh chung):**
+- **Siem đặt IP `172.20.0.20`** trong `config/start.config` (agent bake sẵn trỏ về đó, sai IP → "Disconnected").
+- Mọi `RUN apt-get install ...` thêm `&& rm -rf /var/lib/apt/lists/*` ở **cuối đúng RUN đó**
+  (dọn ở RUN sau vô ích vì layer trước đã ghi rồi).
+- Chỉ dùng base sẵn có: `network`/`network.ssh` (attacker/target), `firefox3` (defender). **Không** kéo base nặng mới.
+- `config/*.config` + `instr_config/*.config` phải **ASCII thuần** (ký tự tiếng Việt có dấu → crash `checkwork`).
+
+### 3.4 Cho siem dùng chung Wazuh (BẮT BUỘC)
+```bash
+bash apply-shared-siem.sh soc-<ten-lab>
+```
+Thiếu bước này → siem tự cài lại Wazuh (**+15.9GB/lab**) và agent dễ "Disconnected".
+(Script tự lưu `.bak`, giữ nguyên file riêng của lab.)
+
+### 3.5 Build & kiểm thử
+```bash
+cd $LABTAINER_DIR/scripts/labtainer-student && rebuild soc-<ten-lab>
+labtainer soc-<ten-lab>
+# Làm thử kịch bản -> checkwork: các tiêu chí ra Y đúng kỳ vọng, agent Active trên dashboard.
+docker system df     # Kiểm tổng KHÔNG phình bất thường (nếu +~16GB = quên apply-shared-siem)
+```
+
+### 3.6 Giải mẫu + commit
+- Tạo `docs/giai-mau-soc-<ten-lab>.md` — **LOCAL ONLY** (đã `gitignore`, **KHÔNG** commit/push).
+- Regenerate `install-<lab>.sh` nếu nhóm dùng installer, rồi:
+```bash
+git add labs/soc-<ten-lab> labs/install-soc-<ten-lab>.sh
+git commit -m "them lab soc-<ten-lab> (<mo ta ngan>)"
+git push origin main
+```
+
+### 3.7 Tick **Checklist LAB MỚI** (ở cuối tài liệu này) trước khi coi là xong.
 
 ---
 
