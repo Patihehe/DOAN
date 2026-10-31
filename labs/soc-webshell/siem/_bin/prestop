@@ -1,0 +1,11 @@
+#!/bin/bash
+# prestop siem: chup bang chung Wazuh phat hien tan cong upload webshell vao he A.
+# (Bang chung forensic cho GVHD doc; cham diem Blue o targeta prestop.)
+trap "echo Timed out; exit" SIGTERM
+
+echo "=== wazuh alerts (FIM them file .phtml trong uploads/, GET ?cmd=, tu 172.20.0.5) ==="
+sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
+  | grep -iE "uploads|\.phtml|\.phar|\.pht|cmd=|upload\.php|172\.20\.0\.5|syscheck|added" | tail -60
+
+echo "=== agents ==="
+sudo -n /var/ossec/bin/agent_control -l 2>/dev/null

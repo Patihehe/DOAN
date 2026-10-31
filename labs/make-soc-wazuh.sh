@@ -44,6 +44,8 @@ docker exec "$C" bash -c '
   rm -rf /tmp/* /var/tmp/* 2>/dev/null
   rm -rf /usr/share/doc/* /usr/share/man/* 2>/dev/null
   find /var/log -type f -exec truncate -s 0 {} + 2>/dev/null
+  # XOA danh tinh lab cu (soc-ssh-defense) de anh nen TRUNG TINH - moi lab tu gan .labname dung
+  rm -f /home/ubuntu/.local/.labname 2>/dev/null
 ' || true
 
 echo ">> 5) Commit thanh soc-wazuh:latest"

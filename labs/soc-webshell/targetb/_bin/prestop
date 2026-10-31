@@ -1,0 +1,9 @@
+#!/bin/bash
+# prestop he B (Red): SV nop FLAG qua /submit.php -> B tu so voi flag that cua chinh no.
+# SV phai RCE (upload .phtml) moi doc duoc flag -> khong the doan.
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER_B"
+[ -f /tmp/.flagok ] && echo "FLAG_OK" || echo "FLAG_NO"
+
+exit 0

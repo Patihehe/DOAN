@@ -84,6 +84,14 @@ RUN rm -f $HOME/home.tar
 ADD $labdir/$lab.tar.gz $HOME
 #
 USER root
+# Ghi DUNG ten lab cho siem: anh nen soc-wazuh mang san .labname cua lab goc (soc-ssh-defense).
+# Neu khong ghi de, zip artifact cua siem bi dat ten theo lab SAI -> grader lech firstlevelzip
+# -> loi "Error occurred within the grader container" khi checkwork.
+# QUAN TRONG: KHONG dung ${lab%%.*} o day - cu phap cat chuoi bash KHONG chay trong RUN Dockerfile
+# (Docker giu nguyen $lab = soc-xxx.siem.student). Dung placeholder __LABNAME__ roi sed thay bang
+# $LABNAME that (shell biet chac) ngay sau heredoc -> bake literal, dung cho MOI lab.
+RUN mkdir -p /home/$user_name/.local && echo "__LABNAME__" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
 CMD ["/entrypoint.sh"]
 SIEM_DF
 
@@ -96,6 +104,8 @@ exit 0
 SIEM_FIX
 
 chmod +x "$FX"
+# Thay placeholder bang ten lab THAT (shell expand chac chan, khong nho Docker cat chuoi)
+sed -i "s/__LABNAME__/$LABNAME/g" "$DF"
 sed -i 's/\r$//' "$FX" "$DF"
 echo ">> Done. Da doi siem cua '$LABNAME' -> FROM soc-wazuh + entrypoint khoi phuc quyen (ban cu luu *.bak)."
 echo ">> Tiep theo:  cd \$LABTAINER_DIR/scripts/labtainer-student && rebuild $LABNAME"
