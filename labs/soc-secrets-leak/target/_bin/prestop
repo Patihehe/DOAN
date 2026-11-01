@@ -1,0 +1,133 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (cham diem incident_resolved).
+# QUAN TRONG: chi in CO (presence flag) / OK, KHONG in gia tri that (mat khau, IP, gio that)
+# -> tranh sinh vien doc prestop.stdout de chep dap an.
+trap "echo Timed out; exit" SIGTERM
+
+# Chi giu DUY NHAT ban chup moi nhat (tranh grader doc nham ban cu truoc khi co su co).
+ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
+
+echo "PRESTOP_MARKER"
+
+# ============== Doc ground-truth (chi root, KHONG in ra) ==============
+GT=/root/.soc_truth
+ATTACKER_IP=$(sudo -n grep '^ATTACKER_IP=' "$GT" 2>/dev/null | cut -d= -f2)
+OLD_ADMIN_PASS=$(sudo -n grep '^OLD_ADMIN_PASS=' "$GT" 2>/dev/null | cut -d= -f2)
+OLD_DB_PASS=$(sudo -n grep '^OLD_DB_PASS=' "$GT" 2>/dev/null | cut -d= -f2)
+OLD_API_KEY=$(sudo -n grep '^OLD_API_KEY=' "$GT" 2>/dev/null | cut -d= -f2)
+OPS_PASS=$(sudo -n grep '^OPS_PASS=' "$GT" 2>/dev/null | cut -d= -f2)
+GT_LEAKED=$(sudo -n grep '^LEAKED=' "$GT" 2>/dev/null | cut -d= -f2)
+GT_EXPOSED=$(sudo -n grep '^EXPOSED_UNTOUCHED=' "$GT" 2>/dev/null | cut -d= -f2)
+BAKFILE=$(sudo -n grep '^BAKFILE=' "$GT" 2>/dev/null | cut -d= -f2)
+
+# ============== 1) EXPOSURE_CLOSED: artifact lo khong con truy cap duoc, trang public van song ==============
+CODE_IDX=$(curl -s -m 3 -o /dev/null -w "%{http_code}" "http://localhost/")
+CODE_GIT=$(curl -s -m 3 -o /dev/null -w "%{http_code}" "http://localhost/.git/HEAD")
+CODE_BAK=$(curl -s -m 3 -o /dev/null -w "%{http_code}" "http://localhost/$BAKFILE")
+CODE_ENVOLD=$(curl -s -m 3 -o /dev/null -w "%{http_code}" "http://localhost/.env.old")
+if [ "$CODE_IDX" = "200" ] && [ "$CODE_GIT" != "200" ] && [ "$CODE_BAK" != "200" ] && [ "$CODE_ENVOLD" != "200" ]; then
+    echo "EXPOSURE_CLOSED"
+fi
+
+# ============== 2) ROTATED_OK: ca 3 bi mat cu deu bi tu choi ==============
+ADMIN_REJECTED=0; DB_REJECTED=0; API_REJECTED=0
+
+RESP=$(curl -s -m 3 -o /dev/null -w "%{http_code}" -d "username=admin&password=${OLD_ADMIN_PASS}" "http://localhost/login.php")
+# login.php KHONG redirect tu dong qua curl (khong co -L): dang nhap dung tra ve 302, sai tra ve 401.
+[ "$RESP" = "401" ] && ADMIN_REJECTED=1
+
+mysql -u appuser -p"$OLD_DB_PASS" -e 'SELECT 1' >/dev/null 2>&1 || DB_REJECTED=1
+
+RESP=$(curl -s -m 3 -o /dev/null -w "%{http_code}" -H "X-API-Key: $OLD_API_KEY" "http://localhost/api/info.php")
+[ "$RESP" != "200" ] && API_REJECTED=1
+
+if [ "$ADMIN_REJECTED" = "1" ] && [ "$DB_REJECTED" = "1" ] && [ "$API_REJECTED" = "1" ]; then
+    echo "ROTATED_OK"
+fi
+
+# ============== 3) SLA_OK: trang public song, tai khoan ops (checker biet) dang nhap va xem dashboard duoc ==============
+SLA_INDEX=$(curl -s -m 3 -o /dev/null -w "%{http_code}" "http://localhost/")
+COOKIEJAR=$(mktemp)
+curl -s -m 3 -o /dev/null -c "$COOKIEJAR" -d "username=ops&password=${OPS_PASS}" "http://localhost/login.php"
+SLA_DASH=$(curl -s -m 3 -o /dev/null -w "%{http_code}" -b "$COOKIEJAR" "http://localhost/dashboard.php")
+rm -f "$COOKIEJAR"
+if [ "$SLA_INDEX" = "200" ] && [ "$SLA_DASH" = "200" ]; then
+    echo "SLA_OK"
+fi
+
+# ============== 4) CONTAINED: da chan IP ke tan cong bang iptables chua? ==============
+if [ -n "$ATTACKER_IP" ]; then
+    IP_ESC=$(echo "$ATTACKER_IP" | sed 's/\./\\./g')
+    sudo -n iptables -S 2>/dev/null | grep -qE "${IP_ESC}(/32)?.*-j (DROP|REJECT)" && echo "CONTAINED"
+fi
+
+# ============== 5) BAO CAO IOC CUA ANALYST (so khop ground-truth, chi in OK) ==============
+F=/home/analyst/findings.txt
+set_eq() {
+    # So sanh hai danh sach phan tay cach nhau bang dau phay, khong phan biet thu tu, khong phan biet hoa/thuong
+    local a b
+    a=$(echo "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | tr 'a-z' 'A-Z' | sort | tr '\n' ',')
+    b=$(echo "$2" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | tr 'a-z' 'A-Z' | sort | tr '\n' ',')
+    [ -n "$a" ] && [ "$a" = "$b" ]
+}
+REP_IP=$(grep '^ATTACKER_IP=' "$F" 2>/dev/null | cut -d= -f2 | tr -d ' ')
+REP_LEAKED=$(grep '^CONFIRMED_LEAKED=' "$F" 2>/dev/null | cut -d= -f2-)
+REP_EXPOSED=$(grep '^EXPOSED_UNTOUCHED=' "$F" 2>/dev/null | cut -d= -f2-)
+
+[ -n "$ATTACKER_IP" ] && [ "$REP_IP" = "$ATTACKER_IP" ] && echo "REP_IP_OK"
+set_eq "$REP_LEAKED" "$GT_LEAKED" && echo "REP_LEAKED_OK"
+set_eq "$REP_EXPOSED" "$GT_EXPOSED" && echo "REP_EXPOSED_OK"
+
+# ============== 6) TIMELINE (so khop GIO THUC TE trong access.log / webapp auth.log, dung sai +-1 phut) ==============
+# Gio that: lay HH:MM cua lan dau tien attacker (dung IP that) lay thanh cong artifact lo / dang nhap / export.
+AL=/var/log/apache2/access.log
+WL=/var/log/webapp/auth.log
+
+gt_leak_time() {
+    [ -n "$ATTACKER_IP" ] || return 1
+    grep -F "$ATTACKER_IP" "$AL" 2>/dev/null \
+        | grep -E 'GET /\.git/HEAD HTTP.* 200 ' \
+        | head -1 \
+        | grep -oE ':[0-9]{2}:[0-9]{2}:[0-9]{2} ' \
+        | head -1 | cut -c2-6
+}
+gt_webapp_time() {
+    # $1 = LOGIN_OK hoac EXPORT ; chi tinh dong co ip = attacker that
+    [ -n "$ATTACKER_IP" ] || return 1
+    grep -F "ip=$ATTACKER_IP" "$WL" 2>/dev/null \
+        | grep "$1" \
+        | head -1 \
+        | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' \
+        | head -1 | cut -c1-5
+}
+GT_LEAK=$(gt_leak_time)
+GT_LOGIN=$(gt_webapp_time "LOGIN_OK")
+GT_EXPORT=$(gt_webapp_time "EXPORT")
+
+T_LEAK=$(grep '^TIME_LEAK=' "$F" 2>/dev/null | cut -d= -f2- | grep -oE '[0-9]{2}:[0-9]{2}')
+T_LOGIN=$(grep '^TIME_LOGIN=' "$F" 2>/dev/null | cut -d= -f2- | grep -oE '[0-9]{2}:[0-9]{2}')
+T_EXPORT=$(grep '^TIME_EXPORT=' "$F" 2>/dev/null | cut -d= -f2- | grep -oE '[0-9]{2}:[0-9]{2}')
+
+to_min() {
+    local hh=${1%%:*} mm=${1##*:}
+    case "$hh$mm" in ""|*[!0-9]*) return 1;; esac
+    echo $((10#$hh * 60 + 10#$mm))
+}
+close() {
+    local s g d
+    s=$(to_min "$1") || return 1
+    g=$(to_min "$2") || return 1
+    d=$(( s > g ? s - g : g - s ))
+    [ "$d" -le 1 ]
+}
+
+close "$T_LEAK" "$GT_LEAK" && echo "TIME_LEAK_OK"
+close "$T_LOGIN" "$GT_LOGIN" && echo "TIME_LOGIN_OK"
+close "$T_EXPORT" "$GT_EXPORT" && echo "TIME_EXPORT_OK"
+
+if close "$T_LEAK" "$GT_LEAK" && close "$T_LOGIN" "$GT_LOGIN" && close "$T_EXPORT" "$GT_EXPORT"; then
+    lm=$(to_min "$T_LEAK"); om=$(to_min "$T_LOGIN"); em=$(to_min "$T_EXPORT")
+    [ "$lm" -le "$om" ] && [ "$om" -le "$em" ] && echo "TIMELINE_OK"
+fi
+
+exit 0

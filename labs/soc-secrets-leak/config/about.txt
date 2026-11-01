@@ -1,0 +1,3 @@
+SOC Lab 67 - Phong thu cau hinh sai
+Ke tan cong quet .git folder de lo trong webroot cua ban va tim duoc mat khau DB.
+Nhiem vu: phat hien qua log va thuc hien phat hien va phong chong lau dai.

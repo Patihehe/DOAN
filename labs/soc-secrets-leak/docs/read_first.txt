@@ -1,0 +1,216 @@
+================================================================================
+ SOC LAB: LO BI MAT QUA .GIT VA FILE BACKUP -> CHIEM CREDENTIAL -> XOAY KHOA
+================================================================================
+
+1. TONG QUAN (OVERVIEW)
+--------------------------------------------------------------------------------
+May chu 'target' chay mot web app noi bo (Apache + PHP + MariaDB). Trong qua trinh
+phat trien, lap trinh vien da vo tinh de lo bi mat qua HAI con duong khac nhau: lich
+su Git cua webroot (mot commit cu con chua file cau hinh nhay cam truoc khi bi xoa)
+va mot file backup cau hinh con sot lai tren webroot. Mot ke tan cong da quet thay,
+tai cac artifact nay, chiem duoc credential, dang nhap trai phep vao trang quan tri,
+va xuat du lieu khach hang. He thong giam sat Wazuh co ghi nhan toan bo qua trinh
+nay trong log - nhung CHUA co luat nao bao dong.
+
+Ban la nhan vien SOC: dieu tra de hieu dung CHUYEN GI DA XAY RA, CACH LY ke tan cong,
+DONG lai duong lo, XOAY KHOA toan bo bi mat da lo (khong chi xoa file la xong), va
+TU VIET mot luat phat hien de lan sau he thong tu bao dong.
+
+LUU Y QUAN TRONG: cac gia tri bi mat (mat khau DB, mat khau admin, API key, ten file
+backup) deu duoc CA NHAN HOA rieng cho may cua ban. Ban PHAI tu doc ra tren he thong
+CUA MINH - khong the chep dap an cua ban khac.
+
+2. MUC TIEU HOC TAP (OBJECTIVES)
+--------------------------------------------------------------------------------
+  - Doc log web/app de khoanh vung: phan biet quet (noise/404) voi lay du lieu thuc
+    su (200 vao dung artifact nhay cam).
+  - Phan biet "bi lo" (co the truy cap duoc) voi "bi lay thuc su" (co bang chung da
+    bi tai) - hai khai niem khac nhau trong dieu tra su co.
+  - Hieu vi sao bi mat nam trong LICH SU GIT van con nguy hiem du cay lam viec hien
+    tai da "sach".
+  - Dung lai TIMELINE cua chuoi tan cong tu nhieu nguon log khac nhau.
+  - Thuc hanh vong doi IR: CONTAINMENT -> ERADICATION -> XOAY KHOA (rotation) -> kiem
+    chung dich vu khong bi sap (SLA).
+  - Tu viet mot luat phat hien Wazuh (custom rule) va kiem thu bang wazuh-logtest.
+
+3. KIEN THUC NEN (BACKGROUND)
+--------------------------------------------------------------------------------
+* Bi mat trong lich su Git: xoa file khoi cay lam viec hien tai (vd `git rm`) KHONG
+  xoa no khoi lich su commit cu. Ai co the doc lai lich su (`git log`, `git show
+  <commit>:<file>`) van lay duoc gia tri that da tung ton tai trong file do. Day la
+  ly do vi sao MITRE xep rieng T1213.003 (Data from Information Repositories: Code
+  Repositories) ben canh T1552.001 (Unsecured Credentials: Credentials in Files).
+* "Lo" khac "bi lay": mot file co the truy cap duoc tu ben ngoai (HTTP tra 200) nhung
+  khong co nghia la ke tan cong DA THUC SU tai no. Dieu tra vien phai doi chieu VOI
+  LOG truy cap de biet chinh xac ke tan cong da cham toi file nao, bo qua file nao.
+* Xoay khoa (secret rotation): khi mot bi mat da bi lo ra ngoai (ke tan cong da co
+  gia tri THAT cua no), chi dong duong truy cap (xoa file, vo hieu URL) la KHONG DU -
+  gia tri cu van dung duoc o noi khac (dang nhap DB, dang nhap app, goi API) cho den
+  khi bi mat do duoc DOI (rotate). Mot he thong co nhieu bi mat lien ket (vd mat khau
+  DB dung o ca server DB va file cau hinh app) phai doi DONG BO, neu khong dich vu se
+  sap (mismatch).
+* Wazuh custom rule: them luat vao /var/ossec/etc/rules/local_rules.xml tren SIEM (id
+  phai >= 100000, vi id duoi 100000 danh cho rule mac dinh/rule nen cua lab). Luat co
+  the KE THUA (<if_sid>) tu mot rule mac dinh da khop truoc, thay vi tu dung doc lap -
+  trong Wazuh, mot rule doc lap thuong THUA uu tien truoc rule mac dinh da khop cung
+  dong log. Kiem thu truoc khi dung luat bang `wazuh-logtest`; nap lai bang
+  `systemctl restart wazuh-manager`.
+* Vong doi IR (NIST): Detection -> CONTAINMENT (chan nguon tan cong) -> ERADICATION
+  (dong duong lo + xoa artifact) -> Recovery (xoay khoa, xac nhan dich vu song) ->
+  Lessons. Thu tu nay quan trong: cach ly truoc de "cam mau" roi moi don dep.
+* Cac ky thuat MITRE ATT&CK lien quan (nen tra lai ma truoc khi dua vao bao cao):
+  T1595.003 (quet/do thu danh sach duong dan), T1213.003 (du lieu tu kho ma nguon),
+  T1552.001 (credential trong file), T1078 (dung tai khoan hop le da chiem duoc),
+  T1005 (lay du lieu tu he thong noi bo).
+
+4. MOI TRUONG & SO DO (TOPOLOGY)
+--------------------------------------------------------------------------------
+  attacker (172.20.0.5, AN)  -- ke tan cong: quet, tai artifact lo, dang nhap, xuat du lieu
+  target   (172.20.0.10)     -- may chay web app + MariaDB; co Wazuh agent; GRADE_CONTAINER
+  siem     (172.20.0.20)     -- Wazuh (dashboard https://172.20.0.20); noi ban VIET LUAT
+  defender (172.20.0.30)     -- tram cua ban: Firefox + SSH de dieu tra/ung pho
+  Dieu tra & ung pho tren target:  ssh analyst@target   (mat khau: analyst)
+  *** Lan dau cho siem cai Wazuh (~8-10'):  tail -f /var/log/wazuh-install.log
+      Ke tan cong ra tay thanh 3 moc cach nhau ~2 phut (lay artifact lo -> dang nhap ->
+      xuat du lieu), co retry de moi lan checkwork deu phan anh dung trang thai. Hay cho
+      khoang 5-8 phut tu luc start lab de ca chuoi su kien kip xay ra truoc khi dieu tra. ***
+
+5. NHIEM VU (TASKS)
+--------------------------------------------------------------------------------
+--- Task 1: Khoanh vung - tim ai da lam gi ---
+  Muc tieu: xac dinh DIA CHI IP thuc su da tai duoc artifact bi lo, phan biet voi
+  cac luot quet/do thu khac.
+  Boi canh/Quan sat: webroot bi quet rat nhieu (phan lon la 404 - "do thu", khong lay
+  duoc gi). Chi mot so IT request thanh cong (HTTP 200) thuc su cham toi duong dan
+  nhay cam. Co ca mot "crawler" khac chi goi thu MOT duong dan roi dung, khong tai gi
+  them - day KHONG phai ke lay du lieu thuc su.
+  Yeu cau: xac dinh dung mot dia chi IP la ke THUC SU da tai du cac artifact nhay cam
+  (khong phai crawler do tham).
+  Goi y cong cu: dashboard Wazuh (Threat Hunting / Security events) de loc theo
+  IP/status; hoac loc truc tiep log web tren target theo ma trang thai HTTP.
+  Tu kiem chung: ban giai thich duoc VI SAO loai duoc cac IP/luot quet khac, chi giu
+  lai dung mot IP.
+
+--- Task 2: Scoping - phan biet "lay thuc su" voi "lo nhung chua bi dung" ---
+  Muc tieu: voi TUNG artifact bi lo tren webroot, xac dinh no thuoc nhom nao:
+  CONFIRMED_LEAKED (da bi ke tan cong lay thuc su) hay EXPOSED_UNTOUCHED (co the truy
+  cap duoc tu ben ngoai nhung khong co bang chung bi lay).
+  Boi canh/Quan sat: webroot de lo nhieu hon mot artifact. Doi chieu NOI DUNG tung
+  file (bi mat gi ben trong) VOI log truy cap (IP ke tan cong co thuc su cham toi do
+  khong). Dung quen kiem tra CA lich su Git, khong chi cac file tinh tren webroot -
+  bi mat co the nam trong mot COMMIT CU da bi xoa khoi cay lam viec hien tai.
+  Yeu cau: phan loai dung, day du cac artifact bi lo vao hai nhom noi tren (kem ten
+  loai bi mat trong tung artifact, vd: lich su Git, file backup cau hinh, file mol
+  khac).
+  Goi y cong cu: doc truc tiep noi dung tung file qua HTTP; voi Git, dung lenh xem
+  lich su commit va noi dung file o mot commit cu.
+  Tu kiem chung: ghi ro ket luan khoanh vung (CONFIRMED_LEAKED vs EXPOSED_UNTOUCHED)
+  truoc khi qua Task 3 - ban se can lai dung nay o Task 7.
+
+--- Task 3: Dung lai TIMELINE ---
+  Muc tieu: xac dinh 3 moc thoi gian (HH:MM) theo DUNG THU TU: luc artifact bi lo lan
+  dau bi tai thanh cong, luc ke tan cong dang nhap thanh cong vao trang quan tri, luc
+  du lieu khach hang bi xuat ra.
+  Boi canh/Quan sat: ba su kien nay xay ra cach nhau vai phut, moi su kien nam o MOT
+  nguon log khac nhau (log truy cap web cho su kien dau, log ung dung cho hai su kien
+  sau). Chi tinh dong log cua DUNG dia chi IP ke tan cong da xac dinh o Task 1 - bo
+  qua cac dong cua IP khac/crawler khac.
+  Yeu cau: ba moc gio dung (sai lech khong qua 1 phut) va dung thu tu.
+  Goi y cong cu: loc log theo IP, tim dong dau tien khop dieu kien tuong ung voi moi
+  su kien; doi chieu voi dashboard Wazuh (Threat Hunting, loc theo thoi gian) de xac
+  nhan lai.
+  Tu kiem chung: ba moc gio ban ghi phai THEO DUNG THU TU tang dan.
+
+--- Task 4: Cau hoi khai niem (bat buoc tu luan, khong co lenh dap an) ---
+  Cau hoi: Vi sao CHI xoa cac file/artifact bi lo khoi webroot la CHUA DU de vo hieu
+  hoa thiet hai da xay ra?
+  Goi y suy luan: nhin lai dieu ban vua ket luan o Task 2 ve noi bi mat nam trong lich
+  su Git - xoa file co xoa duoc "lich su" khong? Ke tan cong da lay duoc GIA TRI THAT
+  cua bi mat do roi - xoa duong truy cap co lam gia tri do het hieu luc khong?
+  Yeu cau: viet cau tra loi vao bao cao cua ban (khong co lenh cu the cho task nay) -
+  phai neu ro CO CHE (lich su git / gia tri da bi lo ra ngoai), khong chi noi "vi
+  khong an toan".
+
+--- Task 5: Containment, Eradication, va Xoay khoa (khong de lech dong bo) ---
+  Muc tieu A (Containment): chan ke tan cong truy cap tiep tuc, truoc khi don dep.
+  Goi y cong cu: tuong lua tren target (iptables), luat chan theo DUNG dia chi IP ke
+  tan cong da xac dinh o Task 1 - khong chan bua anh huong dich vu khac.
+
+  Muc tieu B (Eradication): dong het cac duong lo da xac dinh o Task 2 (ca duong lo
+  CONFIRMED_LEAKED va EXPOSED_UNTOUCHED - loai sach, khong chi loai phan da bi lay).
+  Goi y cong cu: xoa thu muc/file tuong ung tren webroot. Kiem chung lai bang cach tu
+  goi HTTP vao dung cac duong dan do - phai KHONG con tra ve 200, nhung trang chu cua
+  app van phai con song (200).
+
+  Muc tieu C (Xoay khoa - QUAN TRONG NHAT, de sai nhat): DOI toan bo cac bi mat da bi
+  lo (khong chi mat khau quan tri app, con ca mat khau ket noi CSDL va API key). Vi
+  mot so bi mat lien ket voi NHIEU noi (vd mat khau CSDL nam o ca may chu CSDL va o
+  file cau hinh app), ban PHAI doi DONG BO ca hai noi - lech nhau se lam dich vu bao
+  loi (sap SLA).
+  Goi y cong cu: tai khoan `analyst` duoc cap san mot so cong cu/quyen han che vua du
+  de thuc hien viec xoay khoa nay ma khong can biet mat khau goc cua he thong (xem
+  `sudo -l` tren target de biet ban co nhung cong cu nao) - hay doc ky tung cong cu
+  duoc cap va dung DUNG cach (vd mot cong cu co the can chi dinh ro ten tai khoan cho
+  du da chay qua sudo).
+  Tu kiem chung sau khi doi: goi thu trang chu va trang dang nhap bang GIA TRI CU -
+  phai bi TU CHOI; goi lai trang chu - phai VAN 200 (dich vu khong sap).
+
+--- Task 6: Tu viet luat phat hien (TREN TERMINAL SIEM) ---
+  Muc tieu: viet mot luat Wazuh (id tu chon, phai >= 100000) de he thong TU DONG canh
+  bao moi khi co request toi duong dan file backup cau hinh bi lo - nhung KHONG duoc
+  canh bao nham voi cac request binh thuong khac (lab co san mot request "lanh tinh"
+  lap lai de ban tu kiem tra false-positive).
+  Boi canh/Quan sat: dong log truy cap toi duong dan nay co the tra ve ma trang thai
+  KHAC NHAU (200 hoac 404) tuy thoi diem - luat cua ban phai no voi ca hai truong
+  hop. Thu voi mot rule doc lap (khong <if_sid>) truoc - quan sat ket qua wazuh-
+  logtest xem rule nao thuc su no, vi sao.
+  Yeu cau: rule cua ban PHAI no (Alert to be generated) tren request toi duong dan
+  file backup, va KHONG no tren request toi duong dan lanh tinh (favicon.ico).
+  Goi y cong cu: sua /var/ossec/etc/rules/local_rules.xml tren SIEM; dung <url> hoac
+  <match> de loc duong dan; neu rule doc lap khong no, thu KE THUA (<if_sid>) tu rule
+  mac dinh da khop truoc do (xem id rule mac dinh da no trong wazuh-logtest truoc khi
+  them <if_sid> cua ban); kiem thu truoc-sau bang `wazuh-logtest`, nap lai bang
+  `systemctl restart wazuh-manager`.
+  Tu kiem chung: chay wazuh-logtest voi CA HAI dong log mau (duong dan nhay cam va
+  favicon.ico) - chi dong dau no rule cua ban.
+
+--- Task 7: Kiem chung & bao cao (TREN TERMINAL TARGET) ---
+  Muc tieu: ghi lai toan bo ket luan dieu tra vao /home/analyst/findings.txt de he
+  thong cham diem doi chieu.
+  Yeu cau: file phai co du cac truong (moi dong mot truong, dang TEN=GIA_TRI):
+    ATTACKER_IP          -- IP da xac dinh o Task 1.
+    CONFIRMED_LEAKED      -- danh sach (phan tach bang dau phay) cac loai artifact
+                             DA BI LAY THUC SU, ket luan tu Task 2.
+    EXPOSED_UNTOUCHED     -- danh sach cac loai artifact LO NHUNG CHUA BI LAY, ket
+                             luan tu Task 2.
+    TIME_LEAK             -- gio (HH:MM) tu Task 3.
+    TIME_LOGIN            -- gio (HH:MM) tu Task 3.
+    TIME_EXPORT           -- gio (HH:MM) tu Task 3.
+  Goi y cong cu: tao file bang trinh soan thao hoac chuyen huong (redirect/heredoc)
+  tu terminal - CHU Y mot so moi truong shell loi voi `sudo bash -c 'cat <<EOF ...'`,
+  neu gap loi "handleRedirect" hay doi sang dung `tee`.
+  Tu kiem chung: doc lai file, doi chieu voi ket luan Task 2 va Task 3 - dam bao
+  khong con cho trong (placeholder) chua dien.
+
+6. NOP BAI (SUBMISSION)
+--------------------------------------------------------------------------------
+  checkwork soc-secrets-leak  -> tu kiem tra ; stoplab -> nop bai.
+  Cac muc cham (chi cham VIEC BAN LAM, khong co muc nao "tu Y" khi lab vua khoi dong):
+    - reported_iocs          : findings.txt dung IP, dung tap CONFIRMED_LEAKED va
+                                EXPOSED_UNTOUCHED (phai khop CHINH XAC tung tap, khong
+                                thieu khong du).
+    - timeline_reconstructed : 3 moc TIME_* khop GIO THAT trong log (+-1 phut) va
+                                dung thu tu.
+    - contained               : da chan DUNG IP ke tan cong (khong chan bua).
+    - exposure_closed         : moi artifact bi lo (ke ca phan EXPOSED_UNTOUCHED) deu
+                                khong con truy cap duoc; trang chu app van song.
+    - secrets_rotated         : CA BA bi mat cu (mat khau DB, mat khau admin, API
+                                key) deu bi he thong tu choi sau khi xoay khoa. Day la
+                                co che bat loi "chi xoa file ma quen xoay khoa".
+    - sla_ok                  : dich vu cong khai cua app van hoat dong binh thuong
+                                sau khi xoay khoa (khong sap vi lech dong bo).
+    - detection_rule           : luat Wazuh tu viet NO dung tren request nhay cam va
+                                KHONG no tren request lanh tinh.
+    - incident_resolved        : dat duoc TAT CA cac muc tren.
+  Luu y: cac gia tri bi mat/thoi gian la CA NHAN HOA rieng cho may cua ban - khong
+  dung gia tri cua ban khac du cung mot lop.

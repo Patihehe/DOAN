@@ -1,0 +1,42 @@
+#!/bin/bash
+# Chup trang thai siem luc checkwork/stoplab -> prestop.stdout (cham diem detection_rule).
+# QUAN TRONG: chi in CO/OK, KHONG in noi dung rule hay alert that -> tranh sinh vien chep dap an.
+trap "echo Timed out; exit" SIGTERM
+
+ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
+
+echo "PRESTOP_MARKER"
+
+AL=/var/ossec/logs/alerts/alerts.log
+# Doc qua sudo (file chi root/nhom wazuh doc duoc). Sudoers chi cho phep dung "cat" (khong cho tail/head).
+RAW=$(sudo -n cat "$AL" 2>/dev/null)
+
+# Wazuh ghi moi alert thanh mot khoi nhieu dong, cac khoi cach nhau boi 1 dong trong.
+# Voi moi khoi: tim dong "Rule: <id> (level N)", chi nhan id trong khoang 100000-198999
+# (quy uoc: 199000-199999 danh cho rule NEN cua lab, id SV tu viet phai nam ngoai khoang do).
+rule_hit_on() {
+    # $1 = chuoi con can tim trong khoi (vi du duong dan nhay cam hoac marker lanh tinh)
+    local pattern="$1"
+    echo "$RAW" | awk -v RS="" -v pat="$pattern" '
+        $0 ~ pat && $0 ~ /Rule: [0-9]+ \(level/ {
+            n = split($0, lines, "\n")
+            for (i = 1; i <= n; i++) {
+                if (lines[i] ~ /^Rule: [0-9]+/) {
+                    split(lines[i], parts, " ")
+                    id = parts[2] + 0
+                    if (id >= 100000 && id <= 198999) { print "HIT"; exit }
+                }
+            }
+        }
+    '
+}
+
+# config.php.bak-<so> la duong dan file backup bi lo (phan "config.php.bak" khong doi giua cac SV).
+# favicon.ico la probe LANH TINH co dinh ma attacker tu goi dinh ky de kiem tra rule qua rong.
+DETECT=$(rule_hit_on "config[.]php[.]bak")
+FALSEPOS=$(rule_hit_on "favicon[.]ico")
+
+[ "$DETECT" = "HIT" ] && echo "DETECTION_OK"
+[ "$FALSEPOS" = "HIT" ] && echo "FALSE_POSITIVE"
+
+exit 0
