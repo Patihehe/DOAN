@@ -1,0 +1,3 @@
+SOC Lab 6 - Phan ung nhanh voi Ransomware & Khoi phuc du lieu (Wazuh FIM).
+Ma doc Ransomware ma hoa tai lieu trong /srv/shares/finance/ (.enc) va de lai README_DECRYPT.txt.
+Nhiem vu: Phat hien qua Wazuh FIM, trich xuat khoa AES tu /proc/<PID>/environ, diet Ransomware va giai ma khoi phuc du lieu.

@@ -1,0 +1,9 @@
+#!/bin/bash
+# Chay luc 'checkwork'/'stoplab' tren siem. Chup bang chung Wazuh FIM phat hien Ransomware.
+trap "echo Timed out; exit" SIGTERM
+
+echo "=== wazuh alerts (FIM /srv/shares/finance & ransomware) ==="
+sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null | grep -E '/srv/shares/finance|ransomware|README_DECRYPT' | tail -50
+
+echo "=== agents ==="
+sudo -n /var/ossec/bin/agent_control -l 2>/dev/null

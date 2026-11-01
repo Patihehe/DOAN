@@ -48,6 +48,7 @@ Mỗi bước phải **chạy được + chấm điểm được** trước khi 
 **Nhóm 3 — Khai thác & mã độc (host-based)**
 5. Persistence & reverse shell → threat hunting, kill process, xóa cronjob  ✅ `soc-threathunt`
 6. Leo thang dac quyen → điều tra + hardening (IR)  ✅ `soc-privesc`
+7. Phản ứng nhanh với Ransomware → Wazuh FIM, trích xuất khóa từ `/proc/<PID>/environ`, diệt mã độc & giải mã dữ liệu  ✅ `soc-ransomware`
 
 **Hybrid — "Patch & Pwn"** (50% phòng thủ + 50% tấn công có kiểm soát)  ✅ `soc-patch-pwn` (NoteBox: UNION SQLi + Stored XSS)
 
@@ -63,6 +64,7 @@ THI_DOAN/
 │   ├── soc-threathunt/        # Reverse shell + threat hunting
 │   ├── soc-privesc/           # Leo thang dac quyen + IR
 │   ├── soc-patch-pwn/         # Hybrid "Patch & Pwn" (NoteBox)
+│   ├── soc-ransomware/        # Ransomware FIM + Incident Recovery
 │   ├── make-soc-wazuh.sh      # Dựng ảnh nền Wazuh dùng chung
 │   ├── apply-shared-siem*.sh  # Chuyển siem sang ảnh chung
 │   └── optimize-disk.sh       # Dọn dung lượng VM

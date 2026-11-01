@@ -1,0 +1,49 @@
+=== SOC Lab 6: Phan ung nhanh voi Ransomware & Khoi phuc du lieu (Wazuh FIM) ===
+
+File Server noi bo tai may "target" (172.20.0.10) vua bi nhiem ma doc Ransomware!
+Ma doc dang am tham ma hoa toan bo tai lieu tai chinh trong thu muc /srv/shares/finance/
+(doi duoi .txt/.csv thanh .enc bang AES-256-CBC) va de lai to doi tien chuoc README_DECRYPT.txt.
+Dac biet, cu moi 15 giay ma doc lai quet va ma hoa lai neu ban chua tieu diet tien trinh cua no!
+
+Nhiem vu cua ban: DIEU TRA tren SIEM va UNG PHO KHAN CAP tu tram DEFENDER.
+
+--- 1) Phat hien tren SIEM (Dashboard Firefox tren Defender) ---
+  https://172.20.0.20   (admin / xem pass trong /root/wazuh-admin-credentials.txt tren siem)
+  -> Vao File Integrity Monitoring (FIM) / Threat Hunting:
+     Quan sat canh bao FIM realtime tren thu muc /srv/shares/finance/:
+     - Cac file goc (payroll_2026.csv, budget_q4.txt, merger_plan.txt) bi xoa (deleted).
+     - Cac file ma hoa (*.enc) va to doi tien chuoc README_DECRYPT.txt xuat hien (added).
+
+--- 2) Dieu tra, Trich xuat Khoa & Diet Nong (SSH tu defender sang target) ---
+  ssh analyst@target            (mat khau: analyst)
+
+  a. Tim PID cua tien trinh Ransomware dang chay ngam:
+       ps aux | grep -E "crypt|ransom|lock"
+     (Se thay tien trinh: /bin/bash /var/tmp/.kworker_crypt)
+
+  b. QUAN TRONG — Trich xuat Khoa AES-256 tu bo nho moi truong (/proc/<PID>/environ) TRUOC KHI KILL:
+       sudo tr '\0' '\n' < /proc/<PID>/environ | grep RANSOM_KEY
+     (Hoac doc script nguon: sudo cat /var/tmp/.kworker_crypt /etc/cron.d/sys-crypt)
+     -> Ghi nho gia tri khoa (dang: RANSOM_KEY_xxxxxx).
+
+  c. Tieu diet tien trinh Ransomware & Xoa Persistence (Cronjob + Script):
+       sudo rm -f /etc/cron.d/sys-crypt /var/tmp/.kworker_crypt
+       sudo pkill -9 -f .kworker_crypt
+
+--- 3) Khoi phuc du lieu (Incident Recovery) ---
+  Dung khoa <KHOA_TIM_DUOC> vua trich xuat de giai ma toan bo cac file .enc trong /srv/shares/finance/:
+    cd /srv/shares/finance
+    for f in *.enc; do
+      sudo openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:<KHOA_TIM_DUOC> -in "$f" -out "${f%.enc}" && sudo rm -f "$f"
+    done
+
+  Xoa to doi tien chuoc README_DECRYPT.txt:
+    sudo rm -f /srv/shares/finance/README_DECRYPT.txt
+
+--- 4) Kiem chung ---
+  - Kiem tra 3 file goc da phuc hoi nguyen ven va doc duoc noi dung:
+      head /srv/shares/finance/payroll_2026.csv /srv/shares/finance/budget_q4.txt /srv/shares/finance/merger_plan.txt
+  - Khong con file *.enc hay README_DECRYPT.txt trong /srv/shares/finance/.
+
+Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
+Muc tieu: incident_resolved = Y  (Da diet Ransomware + Xoa persistence + Giai ma khoi phuc 100% du lieu).

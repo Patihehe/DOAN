@@ -1,0 +1,38 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
+trap "echo Timed out; exit" SIGTERM
+
+echo "PRESTOP_MARKER"
+
+echo "=== 1. Check Ransomware Process & Persistence ==="
+if pgrep -f "\.kworker_crypt" >/dev/null 2>&1; then
+  echo "RANSOM_PROC_RUNNING"
+else
+  echo "RANSOM_PROC_KILLED"
+fi
+
+if [ -f /var/tmp/.kworker_crypt ] || [ -f /etc/cron.d/sys-crypt ]; then
+  echo "RANSOM_PERSIST_PRESENT"
+else
+  echo "RANSOM_PERSIST_REMOVED"
+fi
+
+echo "=== 2. Check Decrypted Finance Files ==="
+if grep -q "FLAG_FINANCE=PTIT_RANSOM_RECOVERED_OK" /srv/shares/finance/payroll_2026.csv 2>/dev/null && \
+   grep -q "APPROVED_CONFIDENTIAL" /srv/shares/finance/budget_q4.txt 2>/dev/null && \
+   grep -q "CEO_PTIT_CORP" /srv/shares/finance/merger_plan.txt 2>/dev/null; then
+  echo "FILES_DECRYPTED_OK"
+else
+  echo "FILES_STILL_ENCRYPTED"
+fi
+
+echo "=== 3. Check Remaining .enc Files & Ransom Note ==="
+ENC_COUNT=$(ls /srv/shares/finance/*.enc 2>/dev/null | wc -l)
+if [ "$ENC_COUNT" -eq 0 ] && [ ! -f /srv/shares/finance/README_DECRYPT.txt ]; then
+  echo "CLEANUP_COMPLETE_OK"
+else
+  echo "CLEANUP_INCOMPLETE:ENC=$ENC_COUNT"
+fi
+
+echo "=== 4. Check Ransomware Activity Log ==="
+sudo -n tail -n 20 /var/log/ransomware-activity.log 2>/dev/null
