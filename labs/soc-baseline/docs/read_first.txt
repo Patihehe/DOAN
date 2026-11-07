@@ -1,0 +1,74 @@
+========================================================================
+  BAI 3 - BASELINE & BAT THUONG: "Ngui ra cai la" (Cong ty X)
+========================================================================
+
+Bai 1 ban DEM, Bai 2 ban DOC HIEU alert. Hom nay khac han: KHONG co canh bao do chi san.
+Ban duoc giao log ~7 NGAY "binh thuong" cua Cong ty X va phai TU PHAT HIEN 3 hanh vi bat thuong
+bang cach so voi "muc binh thuong" (baseline). Day la kieu phat hien theo HANH VI (anomaly),
+khac bat theo chu ky/dau hieu co san.
+
+BASELINE binh thuong cua Cong ty X:
+  - Dang nhap: trong GIO HANH CHINH (8h-17h), tu IP NOI BO quen (172.20.0.x), moi tai khoan 1-2 IP.
+  - Ket noi ra ngoai (outbound): moi may noi bo chi vai ket noi.
+Cai gi LECH khoi nhung muc tren -> dang ngo.
+
+------------------------------------------------------------------------
+0) MO DASHBOARD
+------------------------------------------------------------------------
+  - Firefox tu mo https://172.20.0.20 ; dang nhap:  analyst / analyst
+  - Discover, index "wazuh-alerts-*".
+  - !!! DAT THOI GIAN = "Last 7 days" (du lieu trai 7 ngay, khong phai 1 ngay).
+  - Banner "API offline" -> BO QUA.
+
+------------------------------------------------------------------------
+3 BAT THUONG CAN TIM
+------------------------------------------------------------------------
+  (A) Mot lan DANG NHAP NGOAI GIO (rang sang), trong khi moi dang nhap khac deu 8h-17h.
+  (B) MOT TAI KHOAN dang nhap tu NHIEU IP khac nhau (la), trong khi nguoi thuong chi 1-2 IP.
+  (C) MOT MAY noi bo gui RAT NHIEU ket noi RA NGOAI, lech han cac may khac.
+
+------------------------------------------------------------------------
+1) TRA LOI 8 CAU (ghi SO vao ~/answers.txt)
+------------------------------------------------------------------------
+  C1. GIO (0-23) cua lan dang nhap NGOAI GIO la may?
+  C2. Octet cuoi IP nguon cua lan dang nhap ngoai gio do (dang 203.0.113.X -> ghi so X)?
+  C3. id cua tai khoan dang nhap tu NHIEU IP nhat (ten user<id> -> ghi so id)?
+  C4. Tai khoan do dang nhap tu BAO NHIEU IP khac nhau?
+  C5. Octet cuoi IP noi bo (172.20.0.X) cua MAY gui nhieu du lieu ra ngoai (ghi so X)?
+  C6. May do co BAO NHIEU ket noi di ra ngoai?
+  C7. Ban tim duoc TONG CONG bao nhieu hanh vi bat thuong? (tim du, dung sot)
+  C8. Phat hien kieu nay dua tren: (1) hanh vi/lech baseline  (2) chu ky co san ? -> ghi 1 hoac 2
+
+  Ghi: nano ~/answers.txt ; vi du  C1=3  C2=88  C3=45  C4=6
+
+------------------------------------------------------------------------
+2) GOI Y 3 CAP
+------------------------------------------------------------------------
+ Cap 1: Dung histogram (bieu do cot theo thoi gian) va "Top values" cua cac field de so sanh.
+ Cap 2 (tim o dau):
+   (A) Loc rule.groups:authentication_success -> xem histogram theo GIO -> 1 cot nam ngoai 8-17h.
+       Mo dong do -> doc gio (C1) va data.srcip (C2).
+   (B) Loc authentication_success va data.srcip:203.0.113.*  (dang nhap tu IP NGOAI la bat thuong)
+       -> Top values data.srcuser -> tai khoan xuat hien nhieu = tai khoan dang ngo (C3).
+       Loc them data.srcuser:user<id> -> so hits = so IP khac nhau (C4).
+   (C) Loc rule.groups:firewall (hoac decoder.name:firewall) -> Top values data.srcip
+       -> may noi bo 172.20.0.x co so ket noi lon vuot troi (C5); so hits cua may do = C6.
+ Cap 3:
+   - C1/C2: authentication_success -> histogram -> cot rang sang -> mo -> gio + octet cuoi srcip.
+   - C3/C4: authentication_success + data.srcip:203.0.113.* -> Top data.srcuser (dau bang) = user bat thuong;
+            so hits khi them data.srcuser:user<id> = so IP khac nhau.
+   - C5/C6: rule.groups:firewall -> Top data.srcip -> 172.20.0.X dau bang; so hits cua no = C6.
+   - C7 = 3.  C8 = 1 (phat hien dua tren HANH VI lech baseline).
+
+------------------------------------------------------------------------
+3) PHAN B - DUNG 2 BIEU DO (ten bat dau "bai3")
+------------------------------------------------------------------------
+  - bai3-dangnhap-theo-gio : Bar, Buckets Date Histogram field timestamp (de lo cot rang sang)
+  - bai3-outbound-theo-may : Bar, Buckets Terms field data.srcip  (de lo may vuot troi)
+  (Bam "Update" moi ve; luu ten bat dau "bai3".)
+
+------------------------------------------------------------------------
+4) NOP BAI
+------------------------------------------------------------------------
+  checkwork ; muc: q1..q8, bai3_partA (dung >=7/8), bai3_partB (>=2 bieu do bai3)
+  Xong: stoplab

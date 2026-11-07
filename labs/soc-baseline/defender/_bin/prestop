@@ -1,0 +1,6 @@
+#!/bin/bash
+# Chay luc checkwork/stoplab tren defender. Chup bai lam cua sinh vien de cham.
+trap "echo Timed out; exit" SIGTERM
+echo "DEFENDER_PRESTOP_MARKER"
+echo "=== answers ==="
+cat /home/ubuntu/answers.txt 2>/dev/null

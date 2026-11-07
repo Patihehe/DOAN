@@ -1,0 +1,4 @@
+soc-baseline - Bai 3 (khep Chang 0) trong lo trinh "Dieu tra su co & Ky nghe phat hien tren SIEM".
+Phan biet binh thuong <-> bat thuong: log ~7 ngay baseline + 3 bat thuong cay san (dang nhap ngoai gio,
+1 tai khoan nhieu IP, 1 may gui nhieu du lieu ra ngoai). Khong co alert do chi san - tu phat hien.
+Muc tieu nang luc: A4 (phan doan/anomaly). Thoi luong ~75 phut.
