@@ -1,0 +1,4 @@
+soc-log-to-alert - Bai 2 trong lo trinh "Dieu tra su co & Ky nghe phat hien tren SIEM".
+Hieu pipeline: log tho -> pre-decoder -> decoder -> rule -> alert. Mo xe 1 alert trong Discover:
+doc full_log, decoder.name, rule.id/level/description, data.*. Du lieu nap san, ca nhan hoa tung SV.
+Muc tieu nang luc: A2+A3. Thoi luong ~75 phut. Buoc dem sang Detection Engineering.

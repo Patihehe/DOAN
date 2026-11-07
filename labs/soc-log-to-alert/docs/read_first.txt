@@ -1,0 +1,75 @@
+========================================================================
+  BAI 2 - TU LOG -> ALERT: "Giai phau mot canh bao" (Cong ty X)
+========================================================================
+
+Bai 1 ban hoc TRUY VAN/DEM du lieu. Hom nay khac han: ban hoc DOC HIEU mot alert -
+no duoc tao ra the nao, moi truong nghia la gi, luat nao da ban no. Nam cho nay ban moi
+tin/triage dung va sau nay moi TU VIET duoc luat (Detection Engineering).
+
+------------------------------------------------------------------------
+PIPELINE CUA WAZUH (hoc ky - co cau hoi)
+------------------------------------------------------------------------
+  Log tho  ->  (1) PRE-DECODER  ->  (2) DECODER  ->  (3) RULE  ->  ALERT
+  - (1) pre-decoder: tach thoi gian, hostname, ten chuong trinh.
+  - (2) DECODER: "boc tach" cac truong trong NOI DUNG log (vd IP, user, ma HTTP...) -> nam o data.*
+        ; decoder.name cho biet DECODER NAO da tach.
+  - (3) RULE: so khop & GAN cho su kien: muc do rule.level, ten rule.description, ma rule.id, nhom rule.groups.
+  => CUNG MOT DECODER co the dan toi NHIEU RULE khac nhau (vd sshd tach ca dang nhap that bai lan thanh cong,
+     nhung moi loai bi mot RULE khac nhau bat -> rule.id khac nhau). DECODER != RULE.
+  Thang muc do rule.level: 0 (thap nhat) -> 15 (cao nhat).
+
+------------------------------------------------------------------------
+0) MO DASHBOARD + CACH GIAI PHAU 1 ALERT
+------------------------------------------------------------------------
+  - Firefox tu mo https://172.20.0.20 ; dang nhap:  analyst / analyst
+  - Discover, index "wazuh-alerts-*", thoi gian = Yesterday.
+  - Bam MUI TEN ">" dau mot dong de MO RONG -> doc: full_log (log tho), decoder.name,
+    rule.id, rule.level, rule.description, data.srcip, data.srcuser, data.id ...
+  - Banner "API offline" (wazuh-manager) -> BO QUA.
+
+------------------------------------------------------------------------
+1) TRA LOI 8 CAU (ghi SO vao ~/answers.txt tren defender)
+------------------------------------------------------------------------
+  C1. Mo alert NGHIEM TRONG NHAT (rule.level cao nhat) -> rule.id cua no la bao nhieu?
+  C2. rule.level cua alert nghiem trong nhat do la may?
+  C3. SSH that bai va SSH thanh cong CUNG decoder 'sshd' nhung KHAC luat.
+      rule.id cua alert SSH THAT BAI la bao nhieu?
+  C4. rule.id cua alert SSH THANH CONG la bao nhieu?
+  C5. Mo mot alert WEB. Trong full_log (dong Apache tho) co ma HTTP (vd 404). Decoder tach ma HTTP do
+      vao FIELD nao? Chon 1 so:   (1) data.srcip   (2) data.id   (3) rule.level   (4) decoder.name
+  C6. rule.id cua mot alert WEB la bao nhieu?
+  C7. Buoc GAN muc do (level) & ten luat cho su kien la buoc thu may? (pre-decoder=1, decoder=2, rule=3)
+  C8. rule.level TOI DA cua thang diem Wazuh la bao nhieu?
+
+  Ghi: nano ~/answers.txt ; vi du  C1=161279  C5=2  C7=3
+
+------------------------------------------------------------------------
+2) GOI Y 3 CAP
+------------------------------------------------------------------------
+ Cap 1: Mo rong (">") mot su kien de doc field. Muon tim "cai nghiem trong nhat" -> sap xep theo rule.level giam dan.
+ Cap 2 (loc gi):
+   - Nghiem trong nhat: Search rule.groups:attack  (hoac sort rule.level desc) -> doc rule.id (C1), rule.level (C2)
+   - SSH that bai:  rule.groups:authentication_failed   -> doc rule.id (C3)
+   - SSH thanh cong: rule.groups:authentication_success -> doc rule.id (C4)
+   - Alert web:  decoder.name:web-accesslog             -> doc rule.id (C6) ; xem full_log vs field data.id (C5)
+ Cap 3:
+   - C1/C2: Search rule.groups:attack -> mo 1 dong -> rule.id (C1) va rule.level (C2).
+   - C3: Search rule.groups:authentication_failed -> mo 1 dong -> rule.id.
+   - C4: Search rule.groups:authentication_success -> mo 1 dong -> rule.id. (khac rule.id cua C3 du cung decoder sshd!)
+   - C5: mo 1 alert web, so sanh so trong full_log ("... 404 512") voi cac field -> ma HTTP nam o data.id -> dap an 2.
+   - C6: Search decoder.name:web-accesslog -> mo 1 dong -> rule.id.
+   - C7: so do pipeline o tren -> rule la buoc 3.  C8: thang 0 -> 15.
+
+------------------------------------------------------------------------
+3) PHAN B - DUNG 2 BIEU DO (ten bat dau "bai2")
+------------------------------------------------------------------------
+  Visualize -> Create visualization -> index wazuh-alerts-*:
+    - bai2-theo-decoder : Pie/Bar, Buckets Terms field decoder.name  (Update -> Save)
+    - bai2-theo-level   : Bar, Buckets Terms field rule.level         (Update -> Save)
+  (Bam nut "Update" o day panel moi ve; luu ten bat dau "bai2".)
+
+------------------------------------------------------------------------
+4) NOP BAI
+------------------------------------------------------------------------
+  checkwork  ; cac muc: q1..q8, bai2_partA (dung >=7/8), bai2_partB (>=2 bieu do bai2)
+  Xong:  stoplab

@@ -1,0 +1,76 @@
+#
+# siem - dung anh nen chung soc-wazuh. Boot-hook Labtainers (fixlocal/param) BI BO QUA tren anh chung,
+# nen SEED duoc lam boi SYSTEMD unit 'seed-lta.service' (bake duoi day). seed-data.py self-random.
+# LUU Y: KHONG chay apply-shared-siem.sh len lab nay.
+#
+ARG registry
+FROM localhost:5000/soc-wazuh:latest
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+RUN (command -v python3 >/dev/null 2>&1) || (apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*) || true
+#
+# Cho prestop doc marker/dap an + chay helper dem saved-object (can doc chung chi root)
+RUN printf '%s\n' \
+  'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /root/.lta_seeded, /usr/bin/cat /root/.lta_seeded, /bin/cat /root/.lta_answers, /usr/bin/cat /root/.lta_answers, /usr/bin/python3 /home/ubuntu/savedobj-count.py' \
+  > /etc/sudoers.d/labtainer-lta && chmod 440 /etc/sudoers.d/labtainer-lta
+#
+# === SEED bang SYSTEMD ===
+RUN printf '%s\n' \
+  '[Unit]' \
+  'Description=Seed log-to-alert data into Wazuh indexer' \
+  'After=wazuh-indexer.service network-online.target' \
+  'Wants=wazuh-indexer.service' \
+  '[Service]' \
+  'Type=oneshot' \
+  'RemainAfterExit=yes' \
+  'ExecStart=/usr/bin/python3 /home/ubuntu/seed-data.py' \
+  '[Install]' \
+  'WantedBy=multi-user.target' \
+  > /etc/systemd/system/seed-lta.service \
+ && mkdir -p /etc/systemd/system/multi-user.target.wants \
+ && ln -sf /etc/systemd/system/seed-lta.service /etc/systemd/system/multi-user.target.wants/seed-lta.service
+#
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# Entrypoint: khoi phuc quyen cac user Wazuh truoc systemd
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'for u in wazuh-indexer wazuh-dashboard; do' \
+  '  id "$u" >/dev/null 2>&1 || continue' \
+  '  chown -R "$u:$u" /usr/share/$u /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+  'done' \
+  'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+  'exec /sbin/init --log-target=journal 3>&1' \
+  > /entrypoint.sh && chmod +x /entrypoint.sh
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+RUN mkdir -p /home/$user_name/.local && echo "soc-log-to-alert" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
+CMD ["/entrypoint.sh"]
