@@ -1,0 +1,4 @@
+soc-onboarding - Bai 1 trong lo trinh "Dieu tra su co & Ky nghe phat hien tren SIEM".
+Lam quen dashboard Wazuh: truy van, loc, doc field, dung bieu do. Du lieu log "hom qua"
+cua Cong ty X duoc nap san, ca nhan hoa tung sinh vien. Khong co tan cong truc tiep.
+Muc tieu nang luc: A1 (su dung SIEM). Thoi luong ~60 phut.

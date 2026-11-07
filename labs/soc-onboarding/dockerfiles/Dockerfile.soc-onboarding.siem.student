@@ -1,0 +1,81 @@
+#
+# siem - dung anh nen chung soc-wazuh (Wazuh cai san). Entrypoint khoi phuc quyen Wazuh truoc init.
+# Bai 1 (soc-onboarding): du lieu log duoc NAP qua _bin/fixlocal.sh -> seed-data.py (sau khi init len).
+# LUU Y: KHONG chay apply-shared-siem.sh len lab nay (no se ghi de fixlocal -> mat buoc seed).
+#
+ARG registry
+FROM localhost:5000/soc-wazuh:latest
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+# Bao dam co python3 (de chay seed + helper dem saved-object)
+RUN (command -v python3 >/dev/null 2>&1) || (apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*) || true
+#
+# Cho prestop doc marker/dap an + chay helper dem saved-object (can doc chung chi root)
+RUN printf '%s\n' \
+  'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /root/.onboarding_seeded, /usr/bin/cat /root/.onboarding_seeded, /bin/cat /root/.onboarding_answers, /usr/bin/cat /root/.onboarding_answers, /usr/bin/python3 /home/ubuntu/savedobj-count.py' \
+  > /etc/sudoers.d/labtainer-onboarding && chmod 440 /etc/sudoers.d/labtainer-onboarding
+#
+# === SEED bang SYSTEMD (vi boot-hook cua Labtainers bi bo qua tren anh nen chung) ===
+# Unit chay /home/ubuntu/seed-data.py (do lab tar dua vao) sau khi indexer len. Enable bang
+# symlink (systemctl enable khong chay duoc luc build). seed-data.py tu random + tu ghi dap an.
+RUN printf '%s\n' \
+  '[Unit]' \
+  'Description=Seed onboarding data into Wazuh indexer' \
+  'After=wazuh-indexer.service network-online.target' \
+  'Wants=wazuh-indexer.service' \
+  '[Service]' \
+  'Type=oneshot' \
+  'RemainAfterExit=yes' \
+  'ExecStart=/usr/bin/python3 /home/ubuntu/seed-data.py' \
+  '[Install]' \
+  'WantedBy=multi-user.target' \
+  > /etc/systemd/system/seed-onboarding.service \
+ && mkdir -p /etc/systemd/system/multi-user.target.wants \
+ && ln -sf /etc/systemd/system/seed-onboarding.service /etc/systemd/system/multi-user.target.wants/seed-onboarding.service
+#
+# Dong bo mui gio voi VM (ICT = UTC+7)
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# Entrypoint: khoi phuc quyen cac user Wazuh (bi reset ve root khi layer anh chung), chay TRUOC systemd.
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'for u in wazuh-indexer wazuh-dashboard; do' \
+  '  id "$u" >/dev/null 2>&1 || continue' \
+  '  chown -R "$u:$u" /usr/share/$u /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+  'done' \
+  'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+  'exec /sbin/init --log-target=journal 3>&1' \
+  > /entrypoint.sh && chmod +x /entrypoint.sh
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+# Ghi DUNG ten lab cho siem (tranh lech firstlevelzip -> loi grader). Literal, khong dung ${lab%%.*}.
+RUN mkdir -p /home/$user_name/.local && echo "soc-onboarding" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
+CMD ["/entrypoint.sh"]

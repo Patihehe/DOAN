@@ -1,0 +1,83 @@
+========================================================================
+  BAI 1 - LAM QUEN WAZUH: "Ngay dau di truc" (Cong ty X)
+========================================================================
+
+Chao mung den SOC cua Cong ty X! Hom nay la ngay dau ban truc. Chua co dieu tra
+gi gap - viec cua ban la LAM QUEN "doi mat" cua SOC: dashboard Wazuh. Toan bo log
+cua HOM QUA da nam san trong he thong. Hay hoc cach TIM CAU TRA LOI trong do.
+
+(Khong co tan cong dang chay. Day la bai luyen truy van - doc du lieu.)
+
+------------------------------------------------------------------------
+0) MO DASHBOARD (tren tram DEFENDER)
+------------------------------------------------------------------------
+  - Firefox tu mo trang:  https://172.20.0.20
+    (Lan dau bao chung chi: Advanced -> Accept the Risk / Add Exception)
+  - Dang nhap:   analyst / analyst
+  - Vao muc "Discover" (hoac Threat Hunting -> Events). Chon index pattern
+    "wazuh-alerts-*" neu duoc hoi.
+  - DAT KHOANG THOI GIAN (goc tren ben phai) = "Yesterday" (hoac Last 24 hours)
+    thi moi thay du lieu hom qua.
+
+  * LUU Y: siem can ~1-2 phut sau khi len de nap xong du lieu. Neu Discover trong,
+    doi chut roi bam Refresh.
+  * Neu dashboard bao "API connection ... offline" (wazuh-manager) -> BO QUA. Bai nay chi
+    dung Discover (doc tu indexer), khong can wazuh-manager.
+
+------------------------------------------------------------------------
+1) TRA LOI 8 CAU (ghi vao file ~/answers.txt tren DEFENDER)
+------------------------------------------------------------------------
+  C1. Hom qua co BAO NHIEU lan dang nhap SSH THAT BAI?
+  C2. User nao bi thu dang nhap sai NHIEU NHAT? (ten dang user<so> -> ghi ca "user<so>")
+  C3. IP web nao gui NHIEU request nhat? (dang 203.0.113.X -> ghi ca IP day du)
+  C4. Co bao nhieu request tra ma HTTP 404?
+  C5. KHUNG GIO nao (0-23) co nhieu su kien nhat?
+  C6. Co bao nhieu request tra ma HTTP 403?
+  C7. Co bao nhieu alert muc do cao (rule.level >= 10)?
+  C8. IP cua lan dang nhap SSH THANH CONG DAU TIEN trong ngay? (dang 172.20.0.X -> ghi ca IP)
+
+  Cach ghi: mo terminal defender, sua file mau:   nano ~/answers.txt
+  Dien ngay sau dau '=' , vi du:  C1=237   C2=user45   C3=203.0.113.88
+
+------------------------------------------------------------------------
+2) GOI Y 3 CAP (tu doc neu bi, cap 3 gan nhu chi tan noi)
+------------------------------------------------------------------------
+ Cap 1 (nhe):
+   - Dung o Discover: go tu khoa vao o Search, hoac bam vao mot field ben trai
+     roi xem "Top values" / "Visualize".
+   - So luong ket qua hien o goc (vd "1,234 hits") = so dem cho cac cau "bao nhieu".
+ Cap 2 (field nao):
+   - SSH that bai: loc rule.groups: authentication_failed
+   - SSH thanh cong: loc rule.groups: authentication_success  (sap xep theo thoi gian TANG dan de thay cai DAU TIEN)
+   - Request web + ma HTTP: field data.id (gia tri "404" / "403" / "200")
+   - IP nguon: field data.srcip ;  user: field data.srcuser ;  muc do: field rule.level
+   - Khung gio: xem bieu do cot theo thoi gian (histogram) o dau trang Discover.
+ Cap 3 (gan nhu loi giai):
+   - C1: Search  rule.groups:authentication_failed   -> doc so hits.
+   - C2: loc nhu C1 -> bam field data.srcuser -> Top values (gia tri dau bang).
+   - C3: loc  data.id:*  (hoac rule.groups:web) -> bam data.srcip -> Top values.
+   - C4/C6: Search  data.id:404   /   data.id:403   -> doc so hits.
+   - C5: nhin histogram, di chuot vao cot cao nhat -> xem gio.
+   - C7: Search  rule.level >= 10   -> doc so hits.
+   - C8: rule.groups:authentication_success, sap xep Time tang dan -> dong tren cung -> data.srcip.
+
+------------------------------------------------------------------------
+3) PHAN B - DUNG DASHBOARD 3 BIEU DO
+------------------------------------------------------------------------
+  Tao 3 visualization va LUU LAI, TEN bat dau bang "bai1", vi du:
+    - bai1-top-ip      (bar: Top data.srcip)
+    - bai1-http-status (pie: ty le data.id)
+    - bai1-theo-gio    (line: so su kien theo thoi gian)
+  (Vao Visualize -> Create -> chon kieu -> chon field -> Save voi ten "bai1...").
+
+------------------------------------------------------------------------
+4) NOP BAI
+------------------------------------------------------------------------
+  - Tren terminal defender:  checkwork   (tu kiem tra - khong lo dap an)
+  - Cac muc cham:
+       q1..q8      = tung cau dung/sai
+       bai1_partA  = Y khi dung >= 7/8 cau
+       bai1_partB  = Y khi da luu >= 3 bieu do ten "bai1"
+  - Xong xuoi:  stoplab   (nop bai)
+
+Chuc ca truc dau tien hanh thong!

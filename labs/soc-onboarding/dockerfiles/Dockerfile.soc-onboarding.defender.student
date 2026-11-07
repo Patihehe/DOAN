@@ -1,0 +1,41 @@
+#
+# Labtainer Dockerfile - defender (tram analyst, Firefox xem dashboard Wazuh)
+#
+ARG registry
+# firefox3 = Firefox moi (chay duoc dashboard Wazuh hien dai)
+FROM $registry/labtainer.firefox3
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+# Dong bo mui gio voi VM (ICT = UTC+7)
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+# Base firefox3 co the da co san user 'ubuntu' -> chi tao neu chua co
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]

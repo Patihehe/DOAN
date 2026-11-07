@@ -1,0 +1,16 @@
+#!/bin/bash
+# Chay luc checkwork/stoplab tren siem (prestop van chay binh thuong voi anh nen chung).
+# Phat DAP AN chuan (do seed ghi) cho grader so khop, va trang thai Phan B.
+# SV khong xem duoc prestop.stdout, va siem an (TERMINALS 0) nen khong lo dap an.
+trap "echo Timed out; exit" SIGTERM
+
+echo "SIEM_PRESTOP_MARKER"
+
+echo "=== seed status ==="
+sudo -n cat /root/.onboarding_seeded 2>/dev/null || echo "NOT_SEEDED"
+
+echo "=== ground truth (dap an chuan) ==="
+sudo -n cat /root/.onboarding_answers 2>/dev/null || echo "NO_ANSWERS"
+
+echo "=== saved objects (title bat dau bang bai1) ==="
+sudo -n python3 /home/ubuntu/savedobj-count.py 2>/dev/null || echo "SAVEDOBJ_COUNT=0"
