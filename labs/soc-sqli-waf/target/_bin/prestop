@@ -19,8 +19,6 @@ echo "NORMAL_TEST=$(curl -s -o /dev/null -w '%{http_code}' "$NORMAL")"
 echo "=== access.log - dau vet SQLi tu attacker (172.20.0.5) ==="
 sudo -n grep -iE 'union|select|1=1|%27|or%20' /var/log/apache2/access.log 2>/dev/null | grep '172.20.0.5' | tail -20
 
-echo "=== findings.txt (bao cao analyst) ==="
-cat /home/analyst/findings.txt 2>/dev/null
-
-echo "=== secret thuc te (cho giang vien doi chieu) ==="
-sudo -n sqlite3 /var/www/db/shop.db 'SELECT secret FROM secret_store;' 2>/dev/null
+echo "=== dieu-tra (phieu dieu tra cua analyst) ==="
+sudo -n cat /home/analyst/dieu-tra.txt 2>/dev/null
+cat /home/analyst/dieu-tra.txt 2>/dev/null

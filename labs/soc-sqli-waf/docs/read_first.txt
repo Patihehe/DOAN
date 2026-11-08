@@ -1,42 +1,112 @@
-=== SOC Lab KB3: SQL Injection -> dieu tra -> Web Application Firewall (Wazuh SIEM) ===
+========================================================================
+  BAI 5 - DIEU TRA TAN CONG WEB (SQLi) & UNG PHO WAF (Cong ty X)
+========================================================================
 
-Mot ke tan cong (an) dang LIEN TUC ban payload SQL Injection vao web app tren "target"
-(form dang nhap + tham so URL) va da EXFIL duoc du lieu nhay cam.
+Chang 0 ban tap doc log. Bai 4 ban dieu tra brute-force SSH. Hom nay la mot
+mat tran khac: SIEM bao dong hang loat request LA thuong vao web app (shop) cua
+Cong ty X - dau hieu SQL INJECTION. Ke tan cong da EXFIL duoc du lieu nhay cam.
 
-Nhiem vu: DIEU TRA qua SIEM, roi BAT + VIET RULE ModSecurity (WAF) de chan SQLi,
-nhung KHONG duoc chan nham traffic hop le. Thao tac tu tram DEFENDER.
+Nhiem vu (SOC analyst): (A) DIEU TRA xem ke tan cong danh vao dau, rut duoc gi;
+(B) UNG PHO: bat Web Application Firewall (ModSecurity) va viet luat chan SQLi
+MA KHONG chan nham khach hang that.
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+Day la duong ong THAT: attacker -> web server (access.log) -> agent Wazuh ->
+canh bao that tren dashboard.
 
---- 1) Xem dashboard (tren defender, Firefox tu mo) ---
-  https://172.20.0.20   (Advanced -> Add Exception)
-  admin / (tren siem chay: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Threat Hunting / Security events: loc su kien tu web (access.log).
-     Tim: IP ke tan cong, THAM SO bi khai thac, cac pattern SQLi (UNION SELECT, ' OR 1=1).
+!!! LAN DAU: siem can ~8-10' de cai xong Wazuh. Neu dashboard chua vao duoc,
+    doi them vai phut (tren siem co the xem:  tail -f /var/log/wazuh-install.log).
 
---- 2) Dieu tra tren target (SSH tu defender) ---
-  ssh analyst@target            (mat khau: analyst)
-  a. Xem log web:        sudo grep -Ei 'union|select|1=1' /var/log/apache2/access.log
-                         -> xac dinh IP tan cong + endpoint + tham so (vi du: product.php?id=)
-  b. Tai hien exfil:     thu chay lai payload de biet du lieu gi bi lo, vi du:
-       curl "http://localhost/product.php?id=0%20UNION%20SELECT%20secret,1%20FROM%20secret_store"
-       -> ghi lai gia tri SECRET lay duoc (moi sinh vien mot gia tri khac nhau).
-  c. Ghi bao cao:        sua /home/analyst/findings.txt (dinh dang KEY=value), vi du:
-       PARAM=id
-       ATTACKER_IP=172.20.0.5
-       SECRET=FLAG-xxxxxx
+------------------------------------------------------------------------
+0) HAI TRAM LAM VIEC
+------------------------------------------------------------------------
+  - defender: Firefox tu mo dashboard  https://172.20.0.20
+      (neu bao canh bao chung chi -> Advanced -> Accept the Risk / Add Exception)
+      Dang nhap:  admin / (lay mat khau: tren siem chay  sudo cat /root/wazuh-admin-credentials.txt)
+      (mat khau admin DOI moi lan build lai siem -> cu cat file tren de lay ban moi nhat)
+  - target (web server): KHONG co man hinh rieng. Analyst phai SSH tu defender:
+      ssh analyst@target            (mat khau: analyst)
+      (go "yes" neu hoi host key. Tu day ban vua GHI PHIEU vua UNG PHO.
+       Khi sudo hoi mat khau -> go: analyst)
 
---- 3) Bat + viet rule WAF (ModSecurity da cai san nhung dang TAT) ---
-  d. Bat engine:   sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
-  e. Viet custom rule, vi du file /etc/modsecurity/custom.conf:
+------------------------------------------------------------------------
+1) DIEU TRA - GHI PHIEU (tren target)
+------------------------------------------------------------------------
+File khung ~/dieu-tra.txt DA CO SAN tren target (5 dong W1=..W5= de trong).
+SSH sang va MO RA DIEN SO:  ssh analyst@target  ->  nano ~/dieu-tra.txt
+Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Wx=<so>  :
+
+  W1. Octet cuoi IP ke tan cong? (dang 172.20.0.X -> ghi so X)
+  W2. Trang (endpoint) nao bi khai thac SQLi?
+        1 = login.php    2 = product.php    3 = search.php    4 = admin.php
+  W3. Tham so (parameter) nao bi noi payload vao?
+        1 = user    2 = id    3 = q    4 = cat
+  W4. Ke tan cong UNION SELECT rut du lieu tu BANG nao trong CSDL?
+        1 = products    2 = users    3 = secret_store    4 = orders
+  W5. Gia tri SECRET bi lo la gi? Secret co dang 'FLAG-<SO>'. Ghi PHAN SO
+      (vi du thay 'FLAG-482913' -> ghi 482913). *** Moi SV mot so khac nhau ***
+
+  Vi du noi dung ~/dieu-tra.txt :
+      W1=5
+      W2=2
+      W3=2
+      W4=3
+      W5=482913
+
+------------------------------------------------------------------------
+2) TIM O DAU (3 cap goi y)
+------------------------------------------------------------------------
+ Cap 1: Tren dashboard (Threat Hunting / Discover, index wazuh-alerts-*) loc su
+        kien tu web. Hoac doc thang access.log tren target. Request SQLi trong
+        rat la: co 'UNION', 'SELECT', "OR 1=1", dau nhay ' (bi encode %27)...
+ Cap 2:
+   W1/W2/W3: Trong access.log, dong tan cong co dang:
+        172.20.0.X - - [...] "GET /<endpoint>?<param>=0 UNION SELECT ... "
+      Tren target:  sudo grep -Ei 'union|select|1=1' /var/log/apache2/access.log | tail
+      -> octet cuoi cua IP (W1), ten file .php (W2), ten tham so truoc dau '=' (W3).
+   W4: Nhin ky menh de UNION SELECT ... FROM <BANG> -> ten BANG bi rut (W4).
+       (co nhieu dong UNION SELECT; dong exfil nham vao bang chua du lieu bi mat).
+   W5: Phai TAI HIEN cau exfil de doc gia tri. Tren target:
+        curl "http://localhost/product.php?id=0%20UNION%20SELECT%20secret,1%20FROM%20secret_store"
+      -> trang in ra 'FLAG-<so>'. Ghi phan SO vao W5.
+ Cap 3 (dap an huong dan):
+   W1=5 (attacker 172.20.0.5). W2=2 (product.php). W3=2 (tham so id).
+   W4=3 (secret_store). W5 KHAC NHAU tung nguoi -> phai tu tai hien cau exfil.
+
+------------------------------------------------------------------------
+3) UNG PHO - BAT WAF & VIET RULE (tren target, qua ssh analyst@target)
+------------------------------------------------------------------------
+  ModSecurity da cai san nhung dang TAT. Ban phai: bat engine, viet 1 rule chan
+  SQLi, nap lai, roi tu kiem (chan SQLi nhung KHONG chan nham request thuong).
+
+  a. Bat engine:
+       sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
+  b. Viet custom rule (vi du /etc/modsecurity/custom.conf):
        sudo tee /etc/modsecurity/custom.conf >/dev/null <<'EOF'
        SecRule ARGS "@rx (?i:union(.*?)select|or[[:space:]]+1=1|'[[:space:]]*or)" \
          "id:100001,phase:2,deny,status:403,log,msg:'SQLi blocked'"
        EOF
-  f. Nap lai:      sudo systemctl reload apache2   (hoac: sudo service apache2 reload)
-  g. Kiem chung:
-       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=0%20UNION%20SELECT%20name,price%20FROM%20products"   # phai 403
-       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=1"                                                  # phai 200
+  c. Nap lai:   sudo systemctl reload apache2   (hoac: sudo service apache2 reload)
+  d. Kiem chung:
+       # SQLi phai bi chan (403):
+       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=0%20UNION%20SELECT%20name,price%20FROM%20products"
+       # Request thuong phai van chay (200):
+       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=1"
 
-Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
-Muc tieu: incident_resolved = Y  (WAF bat + chan dung SQLi + khong chan nham).
+  LUU Y: rule QUA RONG se chan nham request thuong (NORMAL_TEST != 200) -> truot.
+  Can chan dung mau SQLi, khong dung mau chung (vd dung chan moi chu 'select').
+
+------------------------------------------------------------------------
+4) DOC THEM (kham pha - KHONG cham diem) -> ban dap cho Chang 2
+------------------------------------------------------------------------
+  ModSecurity co bo luat chuan OWASP CRS (hang nghin rule). Tren dashboard, thu
+  tim canh bao Wazuh gan nhan ten luat / muc do cho request SQLi. Sang Chang 2
+  (Detection Engineering) ban se TU VIET decoder/rule bat loai tan cong nay va
+  do ty le bao rac (FP/FN).
+
+------------------------------------------------------------------------
+5) NOP BAI
+------------------------------------------------------------------------
+  checkwork  -> can dat:
+     * bai5_dieutra   (dieu tra dung >= 4/5 cau)
+     * incident_resolved = Y  (WAF bat + chan dung SQLi + KHONG chan nham)
+  Xong: stoplab

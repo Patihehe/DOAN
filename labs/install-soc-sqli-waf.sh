@@ -1,8 +1,9 @@
 #!/bin/bash
 # ============================================================================
-# Tu dong tao lab soc-sqli-waf (KB3: SQL Injection -> WAF) tren VM Labtainers.
+# Tu dong tao lab soc-sqli-waf (Bai 5: SQL Injection -> dieu tra + WAF) tren VM Labtainers.
 # Chay tren VM:  bash install-soc-sqli-waf.sh
 # Sau do:        cd $LABTAINER_DIR/scripts/labtainer-student && rebuild soc-sqli-waf
+# (File nay duoc SINH TU DONG tu thu muc nguon - khong sua tay.)
 # ============================================================================
 set -e
 if [ -z "$LABTAINER_DIR" ]; then echo "LOI: chua co bien \$LABTAINER_DIR (hay mo terminal Labtainers)"; exit 1; fi
@@ -10,6 +11,7 @@ LAB=$LABTAINER_DIR/labs/soc-sqli-waf
 echo ">> Tao thu muc lab tai $LAB"
 rm -rf "$LAB"
 mkdir -p "$LAB"
+
 mkdir -p "$LAB/attacker/_bin"
 cat > "$LAB/attacker/_bin/fixlocal.sh" <<'__EOF_SQLI_9z3k__'
 #!/bin/bash
@@ -72,19 +74,18 @@ while True:
 __EOF_SQLI_9z3k__
 mkdir -p "$LAB/config"
 cat > "$LAB/config/about.txt" <<'__EOF_SQLI_9z3k__'
-SOC Lab KB3 - Tan cong Ung dung Web: SQL Injection -> WAF.
-Mot may tan cong (an) lien tuc ban payload SQLi vao web app cua ban, exfil du lieu.
-Nhiem vu: dieu tra access.log qua SIEM, roi bat va viet rule ModSecurity (WAF) chan SQLi
-ma khong chan nham traffic hop le.
+Bai 5 (Chang 1) - Dieu tra tan cong web (SQL Injection) & Ung pho WAF.
+Mot ke tan cong (an) ban payload SQLi vao web app cua Cong ty X, da exfil du lieu nhay cam.
+Nhiem vu: DIEU TRA qua SIEM/web-log (ghi phieu 5 cau: IP, endpoint, tham so, bang bi rut,
+gia tri secret bi lo) roi UNG PHO: bat ModSecurity (WAF) va viet rule chan SQLi ma KHONG
+chan nham traffic hop le. Duong ong Wazuh THAT (agent -> manager -> dashboard).
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/config"
 cat > "$LAB/config/parameter.config" <<'__EOF_SQLI_9z3k__'
 # parameter.config - ca nhan hoa (chong chep bai)
 # Moi sinh vien co "secret" trong CSDL khac nhau -> ket qua exfil (UNION SELECT) khac nhau.
 # Token SECRETVAL duoc thay bang so ngau nhien ngay trong target fixlocal (noi tao DB).
 SECRETVAL : RAND_REPLACE : target:.local/bin/fixlocal.sh : SECRETVAL : 100000 : 999999
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/config"
 cat > "$LAB/config/start.config" <<'__EOF_SQLI_9z3k__'
 # start.config - Lab soc-sqli-waf (KB3 cua thay: SQL Injection -> WAF)
 # attacker (an, Python) ban payload SQLi vao web app tren target.
@@ -100,13 +101,14 @@ NETWORK  SOC_NET
 	MASK 172.20.0.0/24
 	GATEWAY 172.20.0.101
 
-# --- May nan nhan: web server dinh SQLi, noi sinh vien bat WAF ---
+# --- May nan nhan: web server dinh SQLi. KHONG co console rieng (TERMINALS 0):
+#     analyst SSH tu defender sang de dieu tra + bat WAF (dong bo Bai 4). ---
 CONTAINER target
 	USER ubuntu
 	SOC_NET 172.20.0.10
 	ADD-HOST attacker:172.20.0.5
 	ADD-HOST siem:172.20.0.20
-	TERMINALS 1
+	TERMINALS 0
 
 # --- Ke tan cong: Python ban SQLi, chay ngam (TERMINALS 0 = "hidden") ---
 CONTAINER attacker
@@ -136,10 +138,31 @@ __EOF_SQLI_9z3k__
 mkdir -p "$LAB/defender/_bin"
 cat > "$LAB/defender/_bin/student_startup.sh" <<'__EOF_SQLI_9z3k__'
 #!/bin/bash
-# Chay trong terminal ao cua defender. Mo Wazuh dashboard trong Firefox.
-# Chi chay duoi quyen user thuong (khong phai root).
+# Mo Wazuh dashboard trong Firefox tren tram defender.
+# LUU Y: file nay duoc SOURCE vao shell dang nhap -> TUYET DOI khong goi 'exit' (tat terminal)
+# va khong chay vong lap/sleep o foreground (treo terminal). Toan bo bon vao MOT SUBSHELL NEN ( ) &.
+#
+# CHONG LOI "firefox khong len / cannot open display": tu tao MOT FILE symlink
+# /tmp/.X11-unix/X<n> -> /var/tmp/.X11-unix/X<n> (TUYET DOI khong bien ca thu muc /tmp/.X11-unix
+# thanh symlink -> tranh loi doX11Link "same file").
 if ! id | grep -q 'uid=0'; then
-  ( firefox https://172.20.0.20 >/dev/null 2>&1 & )
+  (
+    export DISPLAY="${DISPLAY:-:0}"
+    dn="${DISPLAY#:}"; dn="${dn%%.*}"
+    ensure_x11() {
+      [ -d /tmp/.X11-unix ] || mkdir -p /tmp/.X11-unix 2>/dev/null
+      if [ ! -S "/tmp/.X11-unix/X$dn" ] && [ -S "/var/tmp/.X11-unix/X$dn" ]; then
+        ln -sf "/var/tmp/.X11-unix/X$dn" "/tmp/.X11-unix/X$dn" 2>/dev/null
+      fi
+    }
+    for _ in $(seq 1 20); do
+      ensure_x11
+      [ -S "/tmp/.X11-unix/X$dn" ] && break
+      sleep 2
+    done
+    ensure_x11
+    ( firefox https://172.20.0.20 >/dev/null 2>&1 & )
+  ) >/dev/null 2>&1 &
 fi
 __EOF_SQLI_9z3k__
 mkdir -p "$LAB/dockerfiles"
@@ -182,7 +205,6 @@ ADD $labdir/$lab.tar.gz $HOME
 USER root
 CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/dockerfiles"
 cat > "$LAB/dockerfiles/Dockerfile.soc-sqli-waf.defender.student" <<'__EOF_SQLI_9z3k__'
 #
 # Labtainer Dockerfile - defender (tram analyst, co Firefox xem dashboard Wazuh)
@@ -224,7 +246,6 @@ ADD $labdir/$lab.tar.gz $HOME
 USER root
 CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/dockerfiles"
 cat > "$LAB/dockerfiles/Dockerfile.soc-sqli-waf.siem.student" <<'__EOF_SQLI_9z3k__'
 #
 # Labtainer Dockerfile - siem (chay Wazuh: indexer + server + dashboard)
@@ -276,7 +297,6 @@ ADD $labdir/$lab.tar.gz $HOME
 USER root
 CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/dockerfiles"
 cat > "$LAB/dockerfiles/Dockerfile.soc-sqli-waf.target.student" <<'__EOF_SQLI_9z3k__'
 #
 # Labtainer Dockerfile - target (web server dinh SQLi + ModSecurity + Wazuh agent)
@@ -335,71 +355,156 @@ CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
 __EOF_SQLI_9z3k__
 mkdir -p "$LAB/docs"
 cat > "$LAB/docs/read_first.txt" <<'__EOF_SQLI_9z3k__'
-=== SOC Lab KB3: SQL Injection -> dieu tra -> Web Application Firewall (Wazuh SIEM) ===
+========================================================================
+  BAI 5 - DIEU TRA TAN CONG WEB (SQLi) & UNG PHO WAF (Cong ty X)
+========================================================================
 
-Mot ke tan cong (an) dang LIEN TUC ban payload SQL Injection vao web app tren "target"
-(form dang nhap + tham so URL) va da EXFIL duoc du lieu nhay cam.
+Chang 0 ban tap doc log. Bai 4 ban dieu tra brute-force SSH. Hom nay la mot
+mat tran khac: SIEM bao dong hang loat request LA thuong vao web app (shop) cua
+Cong ty X - dau hieu SQL INJECTION. Ke tan cong da EXFIL duoc du lieu nhay cam.
 
-Nhiem vu: DIEU TRA qua SIEM, roi BAT + VIET RULE ModSecurity (WAF) de chan SQLi,
-nhung KHONG duoc chan nham traffic hop le. Thao tac tu tram DEFENDER.
+Nhiem vu (SOC analyst): (A) DIEU TRA xem ke tan cong danh vao dau, rut duoc gi;
+(B) UNG PHO: bat Web Application Firewall (ModSecurity) va viet luat chan SQLi
+MA KHONG chan nham khach hang that.
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+Day la duong ong THAT: attacker -> web server (access.log) -> agent Wazuh ->
+canh bao that tren dashboard.
 
---- 1) Xem dashboard (tren defender, Firefox tu mo) ---
-  https://172.20.0.20   (Advanced -> Add Exception)
-  admin / (tren siem chay: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Threat Hunting / Security events: loc su kien tu web (access.log).
-     Tim: IP ke tan cong, THAM SO bi khai thac, cac pattern SQLi (UNION SELECT, ' OR 1=1).
+!!! LAN DAU: siem can ~8-10' de cai xong Wazuh. Neu dashboard chua vao duoc,
+    doi them vai phut (tren siem co the xem:  tail -f /var/log/wazuh-install.log).
 
---- 2) Dieu tra tren target (SSH tu defender) ---
-  ssh analyst@target            (mat khau: analyst)
-  a. Xem log web:        sudo grep -Ei 'union|select|1=1' /var/log/apache2/access.log
-                         -> xac dinh IP tan cong + endpoint + tham so (vi du: product.php?id=)
-  b. Tai hien exfil:     thu chay lai payload de biet du lieu gi bi lo, vi du:
-       curl "http://localhost/product.php?id=0%20UNION%20SELECT%20secret,1%20FROM%20secret_store"
-       -> ghi lai gia tri SECRET lay duoc (moi sinh vien mot gia tri khac nhau).
-  c. Ghi bao cao:        sua /home/analyst/findings.txt (dinh dang KEY=value), vi du:
-       PARAM=id
-       ATTACKER_IP=172.20.0.5
-       SECRET=FLAG-xxxxxx
+------------------------------------------------------------------------
+0) HAI TRAM LAM VIEC
+------------------------------------------------------------------------
+  - defender: Firefox tu mo dashboard  https://172.20.0.20
+      (neu bao canh bao chung chi -> Advanced -> Accept the Risk / Add Exception)
+      Dang nhap:  admin / (lay mat khau: tren siem chay  sudo cat /root/wazuh-admin-credentials.txt)
+      (mat khau admin DOI moi lan build lai siem -> cu cat file tren de lay ban moi nhat)
+  - target (web server): KHONG co man hinh rieng. Analyst phai SSH tu defender:
+      ssh analyst@target            (mat khau: analyst)
+      (go "yes" neu hoi host key. Tu day ban vua GHI PHIEU vua UNG PHO.
+       Khi sudo hoi mat khau -> go: analyst)
 
---- 3) Bat + viet rule WAF (ModSecurity da cai san nhung dang TAT) ---
-  d. Bat engine:   sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
-  e. Viet custom rule, vi du file /etc/modsecurity/custom.conf:
+------------------------------------------------------------------------
+1) DIEU TRA - GHI PHIEU (tren target)
+------------------------------------------------------------------------
+File khung ~/dieu-tra.txt DA CO SAN tren target (5 dong W1=..W5= de trong).
+SSH sang va MO RA DIEN SO:  ssh analyst@target  ->  nano ~/dieu-tra.txt
+Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Wx=<so>  :
+
+  W1. Octet cuoi IP ke tan cong? (dang 172.20.0.X -> ghi so X)
+  W2. Trang (endpoint) nao bi khai thac SQLi?
+        1 = login.php    2 = product.php    3 = search.php    4 = admin.php
+  W3. Tham so (parameter) nao bi noi payload vao?
+        1 = user    2 = id    3 = q    4 = cat
+  W4. Ke tan cong UNION SELECT rut du lieu tu BANG nao trong CSDL?
+        1 = products    2 = users    3 = secret_store    4 = orders
+  W5. Gia tri SECRET bi lo la gi? Secret co dang 'FLAG-<SO>'. Ghi PHAN SO
+      (vi du thay 'FLAG-482913' -> ghi 482913). *** Moi SV mot so khac nhau ***
+
+  Vi du noi dung ~/dieu-tra.txt :
+      W1=5
+      W2=2
+      W3=2
+      W4=3
+      W5=482913
+
+------------------------------------------------------------------------
+2) TIM O DAU (3 cap goi y)
+------------------------------------------------------------------------
+ Cap 1: Tren dashboard (Threat Hunting / Discover, index wazuh-alerts-*) loc su
+        kien tu web. Hoac doc thang access.log tren target. Request SQLi trong
+        rat la: co 'UNION', 'SELECT', "OR 1=1", dau nhay ' (bi encode %27)...
+ Cap 2:
+   W1/W2/W3: Trong access.log, dong tan cong co dang:
+        172.20.0.X - - [...] "GET /<endpoint>?<param>=0 UNION SELECT ... "
+      Tren target:  sudo grep -Ei 'union|select|1=1' /var/log/apache2/access.log | tail
+      -> octet cuoi cua IP (W1), ten file .php (W2), ten tham so truoc dau '=' (W3).
+   W4: Nhin ky menh de UNION SELECT ... FROM <BANG> -> ten BANG bi rut (W4).
+       (co nhieu dong UNION SELECT; dong exfil nham vao bang chua du lieu bi mat).
+   W5: Phai TAI HIEN cau exfil de doc gia tri. Tren target:
+        curl "http://localhost/product.php?id=0%20UNION%20SELECT%20secret,1%20FROM%20secret_store"
+      -> trang in ra 'FLAG-<so>'. Ghi phan SO vao W5.
+ Cap 3 (dap an huong dan):
+   W1=5 (attacker 172.20.0.5). W2=2 (product.php). W3=2 (tham so id).
+   W4=3 (secret_store). W5 KHAC NHAU tung nguoi -> phai tu tai hien cau exfil.
+
+------------------------------------------------------------------------
+3) UNG PHO - BAT WAF & VIET RULE (tren target, qua ssh analyst@target)
+------------------------------------------------------------------------
+  ModSecurity da cai san nhung dang TAT. Ban phai: bat engine, viet 1 rule chan
+  SQLi, nap lai, roi tu kiem (chan SQLi nhung KHONG chan nham request thuong).
+
+  a. Bat engine:
+       sudo sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
+  b. Viet custom rule (vi du /etc/modsecurity/custom.conf):
        sudo tee /etc/modsecurity/custom.conf >/dev/null <<'EOF'
        SecRule ARGS "@rx (?i:union(.*?)select|or[[:space:]]+1=1|'[[:space:]]*or)" \
          "id:100001,phase:2,deny,status:403,log,msg:'SQLi blocked'"
        EOF
-  f. Nap lai:      sudo systemctl reload apache2   (hoac: sudo service apache2 reload)
-  g. Kiem chung:
-       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=0%20UNION%20SELECT%20name,price%20FROM%20products"   # phai 403
-       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=1"                                                  # phai 200
+  c. Nap lai:   sudo systemctl reload apache2   (hoac: sudo service apache2 reload)
+  d. Kiem chung:
+       # SQLi phai bi chan (403):
+       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=0%20UNION%20SELECT%20name,price%20FROM%20products"
+       # Request thuong phai van chay (200):
+       curl -o /dev/null -w "%{http_code}\n" "http://localhost/product.php?id=1"
 
-Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
-Muc tieu: incident_resolved = Y  (WAF bat + chan dung SQLi + khong chan nham).
+  LUU Y: rule QUA RONG se chan nham request thuong (NORMAL_TEST != 200) -> truot.
+  Can chan dung mau SQLi, khong dung mau chung (vd dung chan moi chu 'select').
+
+------------------------------------------------------------------------
+4) DOC THEM (kham pha - KHONG cham diem) -> ban dap cho Chang 2
+------------------------------------------------------------------------
+  ModSecurity co bo luat chuan OWASP CRS (hang nghin rule). Tren dashboard, thu
+  tim canh bao Wazuh gan nhan ten luat / muc do cho request SQLi. Sang Chang 2
+  (Detection Engineering) ban se TU VIET decoder/rule bat loai tan cong nay va
+  do ty le bao rac (FP/FN).
+
+------------------------------------------------------------------------
+5) NOP BAI
+------------------------------------------------------------------------
+  checkwork  -> can dat:
+     * bai5_dieutra   (dieu tra dung >= 4/5 cau)
+     * incident_resolved = Y  (WAF bat + chan dung SQLi + KHONG chan nham)
+  Xong: stoplab
 __EOF_SQLI_9z3k__
 mkdir -p "$LAB/instr_config"
 cat > "$LAB/instr_config/goals.config" <<'__EOF_SQLI_9z3k__'
-# goals.config - tieu chi dat/khong dat (KB3: SQLi -> WAF)
+# goals.config - tieu chi dat/khong dat (Bai 5: SQLi -> dieu tra + WAF)
 
-# Phat hien / dieu tra
-attack_detected    = boolean : _siem_detected
-agent_connected    = boolean : _agent_connected
-attack_in_log      = boolean : _attack_seen
-investigation_done = boolean : _reported
+# ===== PHAN A: DIEU TRA (phieu ~/dieu-tra.txt) =====
+# W1=octet IP ke tan cong(5) ; W2=endpoint bi khai thac (product.php=2) ;
+# W3=tham so lo hong (id=2) ; W4=bang bi rut du lieu (secret_store=3) ;
+# W5=gia tri secret bi lo (phan so, parameter.SECRETVAL).
+q1 = matchany : integer_equal : _w1 : answer=5
+q2 = matchany : integer_equal : _w2 : answer=2
+q3 = matchany : integer_equal : _w3 : answer=2
+q4 = matchany : integer_equal : _w4 : answer=3
+q5 = matchany : integer_equal : _w5 : parameter.SECRETVAL
+# Dat Phan A khi dung >= 4/5
+bai5_dieutra = count_greater : 3 : (q1, q2, q3, q4, q5)
 
-# Xu ly (WAF)
-waf_enabled        = boolean : _modsec_on
-waf_blocks_sqli    = boolean : _waf_blocks
-service_available  = boolean : _normal_ok
+# ===== PHAN B: UNG PHO (WAF) - chi cham viec SV THUC SU lam =====
+# (Da bo attack_detected/agent_connected/attack_in_log: nhung cai do tu dung
+#  du SV khong lam gi -> khong do duoc nang luc.)
+waf_enabled       = boolean : _modsec_on
+waf_blocks_sqli   = boolean : _waf_blocks
+service_available = boolean : _normal_ok
 
 # MUC TIEU TONG: WAF bat + chan dung SQLi + KHONG chan nham traffic hop le
-incident_resolved  = boolean : ( _modsec_on and _waf_blocks and _normal_ok )
+incident_resolved = boolean : ( _modsec_on and _waf_blocks and _normal_ok )
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/instr_config"
 cat > "$LAB/instr_config/results.config" <<'__EOF_SQLI_9z3k__'
 # results.config - trich du lieu cham diem (doc tu prestop.stdout)
 
+# --- PHAN A: dieu tra (SV ghi ~/dieu-tra.txt tren target, dang W1=..W5=) ---
+_w1 = target:prestop.stdout : GROUP : 1 : REGEX : W1\s*=\s*([0-9]+)
+_w2 = target:prestop.stdout : GROUP : 1 : REGEX : W2\s*=\s*([0-9]+)
+_w3 = target:prestop.stdout : GROUP : 1 : REGEX : W3\s*=\s*([0-9]+)
+_w4 = target:prestop.stdout : GROUP : 1 : REGEX : W4\s*=\s*([0-9]+)
+_w5 = target:prestop.stdout : GROUP : 1 : REGEX : W5\s*=\s*\D*([0-9]+)
+
+# --- PHAN B: ung pho (WAF) ---
 _marker       = target:prestop.stdout : FILE_REGEX : PRESTOP_MARKER
 # WAF da bat engine?
 _modsec_on    = target:prestop.stdout : FILE_REGEX : SecRuleEngine On
@@ -407,13 +512,6 @@ _modsec_on    = target:prestop.stdout : FILE_REGEX : SecRuleEngine On
 _waf_blocks   = target:prestop.stdout : FILE_REGEX : SQLI_TEST=403
 # Khong chan nham traffic hop le? (self-test request thuong tra ve 200)
 _normal_ok    = target:prestop.stdout : FILE_REGEX : NORMAL_TEST=200
-# Co dau vet SQLi tu attacker trong access.log?
-_attack_seen  = target:prestop.stdout : FILE_REGEX : 172\.20\.0\.5.*(union|select|UNION|SELECT)
-# Analyst da ghi IOC (vi du PARAM=id)?
-_reported     = target:prestop.stdout : FILE_REGEX : PARAM=id
-# SIEM (siem) co canh bao SQLi/web? Agent ket noi?
-_siem_detected   = siem:prestop.stdout : FILE_REGEX : (SQL|sql|injection|Injection)
-_agent_connected = siem:prestop.stdout : FILE_REGEX : target.*Active
 
 # --- Goi y checkwork ---
 #CHECK_TRUE: Chua bat WAF. Sua /etc/modsecurity/modsecurity.conf -> SecRuleEngine On (roi reload apache2).
@@ -422,8 +520,6 @@ cw_on = target:prestop.stdout : FILE_REGEX : SecRuleEngine On
 cw_block = target:prestop.stdout : FILE_REGEX : SQLI_TEST=403
 #CHECK_FALSE: WAF dang chan nham traffic hop le (NORMAL_TEST khac 200). Rule qua rong - thu lai.
 cw_overblock = target:prestop.stdout : FILE_REGEX : NORMAL_TEST=[^2]
-#CHECK_TRUE: Chua ghi IOC vao /home/analyst/findings.txt (vi du: PARAM=id).
-cw_report = target:prestop.stdout : FILE_REGEX : PARAM=id
 __EOF_SQLI_9z3k__
 mkdir -p "$LAB/siem/_bin"
 cat > "$LAB/siem/_bin/fixlocal.sh" <<'__EOF_SQLI_9z3k__'
@@ -436,7 +532,6 @@ if [ ! -d /var/ossec ]; then
 fi
 exit 0
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/siem/_bin"
 cat > "$LAB/siem/_bin/prestop" <<'__EOF_SQLI_9z3k__'
 #!/bin/bash
 # Chay luc 'checkwork'/'stoplab' tren siem. Chup bang chung SIEM da phat hien SQLi.
@@ -557,19 +652,12 @@ echo "$PW" | sudo -S systemctl restart wazuh-agent 2>/dev/null \
 echo "$PW" | sudo -S useradd -m -s /bin/bash analyst 2>/dev/null
 echo "$PW" | sudo -S bash -c 'echo "analyst:analyst" | chpasswd'
 echo "$PW" | sudo -S usermod -aG sudo analyst 2>/dev/null
-cat > /tmp/findings.txt <<'FND'
-# BAO CAO DIEU TRA - dien gia tri ban tim duoc (giu dung dinh dang KEY=value):
-PARAM=
-ATTACKER_IP=
-SECRET=
-FND
-echo "$PW" | sudo -S cp /tmp/findings.txt /home/analyst/findings.txt
-echo "$PW" | sudo -S chown analyst:analyst /home/analyst/findings.txt
-echo "$PW" | sudo -S chmod 644 /home/analyst/findings.txt
+# Tao san KHUNG phieu dieu tra cho analyst (SV chi dien SO sau moi dau '=').
+# Chi tao neu chua co -> khong de len dap an SV neu fixlocal chay lai.
+echo "$PW" | sudo -S bash -c '[ -f /home/analyst/dieu-tra.txt ] || { printf "# Phieu dieu tra - dien SO sau moi dau \"=\" (xem goi y trong read_first)\nW1=\nW2=\nW3=\nW4=\nW5=\n" > /home/analyst/dieu-tra.txt; chown analyst:analyst /home/analyst/dieu-tra.txt; chmod 644 /home/analyst/dieu-tra.txt; }'
 
 exit 0
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/target/_bin"
 cat > "$LAB/target/_bin/prestop" <<'__EOF_SQLI_9z3k__'
 #!/bin/bash
 # Chup trang thai target luc checkwork/stoplab -> prestop.stdout (dung cham diem).
@@ -592,17 +680,15 @@ echo "NORMAL_TEST=$(curl -s -o /dev/null -w '%{http_code}' "$NORMAL")"
 echo "=== access.log - dau vet SQLi tu attacker (172.20.0.5) ==="
 sudo -n grep -iE 'union|select|1=1|%27|or%20' /var/log/apache2/access.log 2>/dev/null | grep '172.20.0.5' | tail -20
 
-echo "=== findings.txt (bao cao analyst) ==="
-cat /home/analyst/findings.txt 2>/dev/null
-
-echo "=== secret thuc te (cho giang vien doi chieu) ==="
-sudo -n sqlite3 /var/www/db/shop.db 'SELECT secret FROM secret_store;' 2>/dev/null
+echo "=== dieu-tra (phieu dieu tra cua analyst) ==="
+sudo -n cat /home/analyst/dieu-tra.txt 2>/dev/null
+cat /home/analyst/dieu-tra.txt 2>/dev/null
 __EOF_SQLI_9z3k__
-mkdir -p "$LAB/target/_bin"
 cat > "$LAB/target/_bin/treataslocal" <<'__EOF_SQLI_9z3k__'
 apache2
 modsecurity
 __EOF_SQLI_9z3k__
+
 echo ">> Cap quyen thuc thi + chuan hoa EOL (LF)"
 chmod +x "$LAB"/attacker/_bin/*.sh "$LAB"/target/_bin/* "$LAB"/siem/_bin/* "$LAB"/defender/_bin/*.sh "$LAB"/siem/*.sh "$LAB"/attacker/*.py 2>/dev/null || true
 find "$LAB" -type f -exec sed -i 's/\r$//' {} +
