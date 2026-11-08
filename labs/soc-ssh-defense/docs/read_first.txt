@@ -1,30 +1,95 @@
-=== SOC Lab: Ung pho su co xam nhap SSH (Wazuh SIEM) ===
+========================================================================
+  BAI 4 - DIEU TRA & UNG PHO SU CO XAM NHAP SSH (Cong ty X)
+========================================================================
 
-Mot ke tan cong da brute-force SSH vao "target" va CHIEM DUOC mot tai khoan nhan vien,
-roi CAI CAM de quay lai (SSH key backdoor + cronjob doc). No con dinh ky cai lai,
-nen ban phai CHAN duoc no thi don dep moi triet de.
+Chang 0 ban tap DOC va SO SANH log. Hom nay la ca truc that: SIEM bao dong mot
+chuoi dang nhap SSH THAT BAI don dap vao mot server cua Cong ty X - dau hieu
+BRUTE-FORCE. Nhiem vu cua ban (SOC analyst): DIEU TRA xem chuyen gi da xay ra,
+ke tan cong CHIEM duoc gi, cai cam gi - roi UNG PHO cho triet de.
 
-Nhiem vu: DIEU TRA va UNG PHO tu tram DEFENDER (khong lam truc tiep tren target).
+Day la lan dau ban lam viec voi DUONG ONG THAT: tan cong that -> agent Wazuh
+that tren may nan nhan -> canh bao that tren dashboard (khong phai log nap san).
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+!!! LAN DAU: siem can ~8-10' de cai xong Wazuh. Neu dashboard chua vao duoc,
+    doi them vai phut (tren siem co the xem:  tail -f /var/log/wazuh-install.log).
 
---- 1) Dashboard (tren defender, Firefox tu mo) ---
-  https://172.20.0.20   (Advanced -> Add Exception)
-  admin / (tren siem chay: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Threat Hunting: tim IP tan cong, va TAI KHOAN NAO bi chiem
-     (tai khoan co su kien dang nhap THANH CONG, khac voi chi bi thu that bai).
+------------------------------------------------------------------------
+0) HAI TRAM LAM VIEC
+------------------------------------------------------------------------
+  - defender: Firefox tu mo dashboard  https://172.20.0.20
+      (neu bao canh bao chung chi -> Advanced -> Accept the Risk / Add Exception)
+      Dang nhap:  admin / (lay mat khau: tren siem chay  sudo cat /root/wazuh-admin-credentials.txt)
+      (mat khau admin DOI moi lan build lai siem -> cu cat file tren de lay ban moi nhat)
+  - target (may nan nhan): KHONG co man hinh rieng. Analyst phai SSH tu defender:
+      ssh analyst@target            (mat khau: analyst)
+      (go "yes" neu hoi host key. Tu day ban vua GHI PHIEU vua UNG PHO.)
 
---- 2) Dieu tra & ung pho (SSH tu defender sang target) ---
-  ssh analyst@target            (mat khau: analyst)
-  a. Xac dinh tai khoan bi chiem:  sudo cat /var/log/auth.log | grep "Accepted password"
-                                   (dang: "Accepted password for emp#### from 172.20.0.5")
-  b. Chan ke tan cong:             sudo iptables -A INPUT -s <IP> -j DROP
-  c. Go SSH key backdoor:          soat /home/<user>/.ssh/authorized_keys,
-                                   xoa dong co 'backdoor@attacker'
-  d. Xoa cronjob doc:              sudo crontab -u <user> -l
-                                   sudo crontab -u <user> -r   (hoac xoa dong .beacon)
-  e. Khoa tai khoan bi chiem:      sudo passwd -l <user>
-  f. Kiem chung: khong con backdoor/cron; SSH hop le van hoat dong.
+------------------------------------------------------------------------
+1) DIEU TRA - GHI PHIEU (tren target)
+------------------------------------------------------------------------
+File khung ~/dieu-tra.txt DA CO SAN tren target (5 dong C1=..C5= de trong).
+SSH sang va MO RA DIEN SO:  ssh analyst@target  ->  nano ~/dieu-tra.txt
+Tra loi 6 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Cx=<so>  :
 
-Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
-Muc tieu: incident_resolved = Y  (da chan + khoa + go sach backdoor & cron).
+  C1. Octet cuoi IP ke tan cong? (dang 172.20.0.X -> ghi so X)
+  C2. id tai khoan bi CHIEM? (tai khoan co su kien dang nhap THANH CONG tu ke
+      tan cong, dang emp#### -> chi ghi phan SO, vi du emp4521 -> 4521)
+  C3. Tai khoan bi DO brute-force (RAT NHIEU lan that bai) la ai? (ghi SO lua chon)
+        1 = emp<id>    2 = alice    3 = analyst    4 = root
+  C4. So hieu IMPLANT: comment cua SSH-key la co dang 'backdoor-<SO>@attacker',
+      va ten script cron doc la '/tmp/.beacon<SO>.sh'. Hai cho dung CUNG mot <SO>
+      (bang chung cung mot ke). Ghi <SO> do.
+  C5. Tong cong ke tan cong cai may LOP duy tri (persistence)? (tim du, dung sot)
+
+  Vi du noi dung ~/dieu-tra.txt :
+      C1=5
+      C2=4521
+      C3=2
+      C4=742
+      C5=2
+
+------------------------------------------------------------------------
+2) TIM O DAU (3 cap goi y)
+------------------------------------------------------------------------
+ Cap 1: Tren dashboard (Threat Hunting / Discover, index wazuh-alerts-*) hay
+        phan biet 2 loai su kien: dang nhap THAT BAI (bi do) vs THANH CONG (bi chiem).
+ Cap 2:
+   C1/C2: Loc su kien dang nhap. "Accepted password ... from 172.20.0.5" -> lay IP (C1)
+          va ten tai khoan bi chiem (C2). Luu y: tai khoan bi DO nhieu (that bai)
+          KHAC tai khoan bi CHIEM (thanh cong) - do la bay cua C3.
+   C4/C5: Soi dau vet cai cam TREN tai khoan bi chiem (sau khi ssh sang target):
+            Lop 1 - SSH key la:  cat /home/emp<id>/.ssh/authorized_keys   (dong 'backdoor-<SO>@attacker')
+            Lop 2 - cron doc:    sudo crontab -u emp<id> -l               (dong /tmp/.beacon<SO>.sh)
+          Hai noi cung mot <SO> -> C4. Dem du 2 lop -> C5=2.
+ Cap 3 (dap an huong dan):
+   C1=5 (attacker 172.20.0.5). C3=2 (alice bi do, emp<id> moi bi chiem).
+   C5=2. C2 va C4 KHAC NHAU tung nguoi -> phai tu tim.
+
+------------------------------------------------------------------------
+3) UNG PHO - THU TU QUAN TRONG !
+------------------------------------------------------------------------
+  Ke tan cong CAI LAI persistence moi ~20 giay. Vi vay:
+  => CHAN ke tan cong TRUOC, DON DEP SAU. Neu don truoc khi chan, backdoor moc lai.
+
+  (tren target, qua ssh analyst@target)
+  a. CHAN IP:          sudo iptables -A INPUT -s 172.20.0.5 -j DROP
+  b. Go SSH key la:    soat /home/emp<id>/.ssh/authorized_keys, xoa dong 'backdoor-...@attacker'
+  c. Xoa cron doc:     sudo crontab -u emp<id> -r      (hoac xoa dong .beacon)
+  d. Khoa tai khoan:   sudo passwd -l emp<id>
+  e. Kiem chung:       khong con backdoor/cron; SSH hop le van dung.
+
+------------------------------------------------------------------------
+4) DOC THEM (kham pha - KHONG cham diem) -> ban dap cho Chang 2
+------------------------------------------------------------------------
+  Tren dashboard, tim canh bao co mo ta dang "Multiple authentication failures"
+  hoac "brute force". Do la mot RULE TUONG QUAN: no gom NHIEU su kien that bai
+  le te thanh MOT canh bao muc cao hon. Ghi lai rule.id cua no.
+  -> Sang Chang 2 (Detection Engineering) ban se TU VIET loai rule tuong quan nay.
+
+------------------------------------------------------------------------
+5) NOP BAI
+------------------------------------------------------------------------
+  checkwork  -> can dat:
+     * bai4_dieutra   (dieu tra dung >= 4/5 cau)
+     * incident_resolved = Y  (da CHAN + KHOA + go sach backdoor & cron)
+  Xong: stoplab

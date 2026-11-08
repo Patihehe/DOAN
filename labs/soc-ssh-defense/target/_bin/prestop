@@ -26,3 +26,7 @@ echo "=== emp shadow lock ==="
 for u in $(ls /home 2>/dev/null | grep '^emp'); do
   sudo -n grep "^$u:" /etc/shadow 2>/dev/null
 done
+
+echo "=== dieu-tra (phieu dieu tra cua analyst) ==="
+sudo -n cat /home/analyst/dieu-tra.txt 2>/dev/null
+cat /home/analyst/dieu-tra.txt 2>/dev/null

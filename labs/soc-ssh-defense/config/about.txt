@@ -1,3 +1,5 @@
-SOC Lab 1 - Phong thu SSH brute-force.
-Mot may tan cong (an) lien tuc do mat khau SSH vao may cua ban.
-Nhiem vu: phat hien qua log va chan IP ke tan cong bang iptables.
+Bai 4 (Chang 1) - Dieu tra & Ung pho su co xam nhap SSH.
+Mot ke tan cong (an) brute-force SSH, chiem mot tai khoan nhan vien va cai cam
+persistence (SSH key backdoor + cron), dinh ky cai lai. Nhiem vu: dieu tra tren
+Wazuh (IOC, phan biet tai khoan bi do vs bi chiem, tim persistence) roi ung pho
+(chan IP, go sach, khoa tai khoan). Duong ong Wazuh THAT (agent -> manager -> dashboard).
