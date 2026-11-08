@@ -1,8 +1,9 @@
 #
-# Labtainer Dockerfile - siem (chay Wazuh: indexer + server + dashboard)
+# siem - dung image nen soc-wazuh (Wazuh cai san). Entrypoint khoi phuc quyen Wazuh truoc init.
+# (Da BAKE san anh chung vao nguon - KHONG can chay apply-shared-siem.sh nua. Giong Chang 0.)
 #
 ARG registry
-FROM $registry/labtainer.base2
+FROM localhost:5000/soc-wazuh:latest
 #
 ARG lab
 ARG labdir
@@ -15,32 +16,37 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
+# Cho prestop doc alerts + agent_control khong can mat khau (de cham diem detection)
+RUN echo 'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /var/ossec/logs/alerts/alerts.log, /usr/bin/cat /var/ossec/logs/alerts/alerts.log, /var/ossec/bin/agent_control' > /etc/sudoers.d/labtainer-wazuh \
+    && chmod 440 /etc/sudoers.d/labtainer-wazuh
+#
 # === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
 ENV TZ=Asia/Ho_Chi_Minh
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/* || true
 #
-# Cong cu cho bake + cai offline (setcap = libcap2-bin)
-RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg tar libcap2-bin openssl \
-    && rm -rf /var/lib/apt/lists/*
-#
-# Cho prestop doc alerts + agent_control khong can mat khau (de cham diem)
-RUN echo 'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /var/ossec/logs/alerts/alerts.log, /usr/bin/cat /var/ossec/logs/alerts/alerts.log, /var/ossec/bin/agent_control' > /etc/sudoers.d/labtainer-wazuh \
-    && chmod 440 /etc/sudoers.d/labtainer-wazuh
-#
-# --- PRE-BAKE: tai goi Wazuh + tao chung chi luc BUILD (de first-boot cai OFFLINE) ---
-RUN mkdir -p /root/wz && cd /root/wz \
- && curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh \
- && bash wazuh-install.sh -dw deb -da amd64 \
- && curl -sO https://packages.wazuh.com/4.14/config.yml \
- && sed -i 's/<[a-z0-9-]*-ip>/127.0.0.1/g' config.yml \
- && bash wazuh-install.sh -g
+# === Entrypoint: khoi phuc quyen cac user Wazuh (bi reset ve root khi layer image chung).
+#     Chay o PID 1 TRUOC systemd -> OpenSearch chua chay -> chown /var/lib an toan (khong hong node.lock),
+#     roi exec /sbin/init -> systemd khoi dong day du indexer + manager + dashboard + filebeat. ===
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  '# Khoi phuc quyen cac user Wazuh truoc khi systemd start cac service.' \
+  'for u in wazuh-indexer wazuh-dashboard; do' \
+  '  id "$u" >/dev/null 2>&1 || continue' \
+  '  chown -R "$u:$u" /usr/share/$u /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+  'done' \
+  '# filebeat + wazuh-manager chay root -> khong can chown' \
+  '# Don trang thai agent cu tu anh nen (counter rids + client.keys) -> agent enroll lai sach,' \
+  '# tranh loi "counter mismatch" lam agent Disconnected khi dung image chung.' \
+  'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+  'exec /sbin/init --log-target=journal 3>&1' \
+  > /entrypoint.sh && chmod +x /entrypoint.sh
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /
 #
-RUN useradd -ms /bin/bash $user_name
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
 RUN echo "$user_name:$password" | chpasswd
 RUN adduser $user_name sudo
 #
@@ -52,4 +58,9 @@ RUN rm -f $HOME/home.tar
 ADD $labdir/$lab.tar.gz $HOME
 #
 USER root
-CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
+# Ghi DUNG ten lab cho siem: anh nen soc-wazuh mang san .labname cua lab goc (soc-ssh-defense).
+# Neu khong ghi de, zip artifact cua siem bi dat ten theo lab SAI -> grader lech firstlevelzip
+# -> loi "Error occurred within the grader container" khi checkwork.
+RUN mkdir -p /home/$user_name/.local && echo "soc-webshell" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
+CMD ["/entrypoint.sh"]

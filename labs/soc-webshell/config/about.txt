@@ -1,6 +1,7 @@
 SOC Lab - Web Shell Upload -> RCE (Hybrid Blue + Red) - web app "PhotoBox" (upload anh).
 Blue: he A dang bi tan cong upload webshell: ke tan cong bypass blocklist ngay tho (.php bi chan)
-bang duoi .phtml -> thuc thi lenh (RCE). SV dieu tra qua SIEM (FIM + access log), go webshell va
-VA GOC ham upload, giu chuc nang tai anh hop le chay dung.
+bang duoi .phtml -> thuc thi lenh (RCE). SV dieu tra qua SIEM (FIM + access log), GHI PHIEU 5 cau
+(~/dieu-tra.txt: IP, endpoint upload, duoi lach, tham so RCE, thu muc FIM bao), go webshell va
+VA GOC ham upload, giu chuc nang tai anh hop le chay dung (SLA).
 Red: he B la ban sao chua va, chi HTTP. SV tu khai thac: tim form upload -> .php bi chan -> dung
 .phtml upload webshell -> RCE -> doc file flag ca nhan hoa -> nop qua /submit.php tren he B.

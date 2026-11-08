@@ -3,7 +3,7 @@
 #   SLA_OK     : upload anh jpg HOP LE van thanh cong (app con chay dung)
 #   A_RCE_OPEN : upload file .phtml test -> VAN THUC THI duoc (chua va goc)
 #   A_WS_LEFT  : con file webshell (php/phtml/phar/pht) cua ke tan cong trong uploads/
-#   REP_*      : bao cao findings.txt
+#   (phieu dieu tra D1..D5 in THO o cuoi -> cham o goals.config)
 # Phan biet THUC THI vs LO SOURCE bang phep tinh: chi khi PHP chay moi ra tong.
 trap "echo Timed out; exit" SIGTERM
 
@@ -35,10 +35,10 @@ rm -f "$TMP/zzck.phtml"
 LEFT=$(find "$UP" -maxdepth 1 -type f -regextype posix-extended -iregex '.*\.(php|phtml|phar|pht|php[0-9])$' 2>/dev/null | wc -l)
 [ "$LEFT" -gt 0 ] && echo "A_WS_LEFT"
 
-# --- Bao cao Blue (chi in OK) ---
-F=/home/analyst/findings.txt
-grep '^ATTACKER_IP=' "$F" 2>/dev/null | grep -q '172.20.0.5' && echo "REP_IP_OK"
-grep '^VULN=' "$F" 2>/dev/null | grep -qiE 'upload|webshell|web shell|rce|phtml|thuc thi' && echo "REP_V_OK"
+# --- Phieu dieu tra Blue (in THO, cham o goals.config - khong tu phan o day) ---
+echo "=== dieu-tra (phieu Blue cua analyst) ==="
+sudo -n cat /home/analyst/dieu-tra.txt 2>/dev/null
+cat /home/analyst/dieu-tra.txt 2>/dev/null
 
 rm -rf "$TMP"
 exit 0

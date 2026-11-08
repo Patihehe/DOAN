@@ -1,8 +1,5 @@
 #!/bin/bash
-# Lan khoi dong dau tren siem: tu cai Wazuh all-in-one o CHE DO NEN (~10-15 phut).
-# $1 = mat khau sudo. Chi cai neu chua co (/var/ossec).
-PW="$1"
-if [ ! -d /var/ossec ]; then
-  echo "$PW" | sudo -S nohup bash /home/ubuntu/wazuh-setup.sh >/dev/null 2>&1 &
-fi
+# soc-wazuh da cai san Wazuh. Quyen cac user Wazuh duoc khoi phuc o /entrypoint.sh (PID 1, TRUOC systemd),
+# nen o day KHONG chown gi (chown /var/lib luc dang chay se hong node.lock cua OpenSearch).
+# systemd tu khoi dong indexer/manager/filebeat/dashboard luc boot. (Da bake anh chung -> khong goi wazuh-setup.)
 exit 0

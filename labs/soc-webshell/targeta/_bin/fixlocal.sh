@@ -82,18 +82,8 @@ S service rsyslog start 2>/dev/null || S systemctl start rsyslog 2>/dev/null || 
 S bash -c "sed -i 's#</ossec_config>#<syscheck><directories realtime=\"yes\" check_all=\"yes\" report_changes=\"yes\">/var/www/html/uploads</directories></syscheck><localfile><log_format>apache</log_format><location>/var/log/apache2/access.log</location></localfile></ossec_config>#' /var/ossec/etc/ossec.conf" 2>/dev/null
 S systemctl restart wazuh-agent 2>/dev/null || S service wazuh-agent restart 2>/dev/null || true
 
-# Bao cao dieu tra (Blue)
-cat > /tmp/findings.txt <<'FND'
-# BAO CAO DIEU TRA (Blue) - dien gia tri ban TU TIM DUOC qua SIEM/log (KEY=value):
-# ATTACKER_IP : IP ke tan cong
-# VULN        : lo hong (vd: Unrestricted file upload -> web shell RCE qua .phtml)
-# WEBSHELL    : ten (hoac duoi) file webshell tim thay trong uploads/
-ATTACKER_IP=
-VULN=
-WEBSHELL=
-FND
-S cp /tmp/findings.txt /home/analyst/findings.txt
-S chown analyst:analyst /home/analyst/findings.txt
-S chmod 644 /home/analyst/findings.txt
+# Khung phieu dieu tra (Blue) - SV chi dien SO sau moi dau '='. Chi tao neu chua co
+# -> khong de len dap an SV neu fixlocal chay lai.
+S bash -c '[ -f /home/analyst/dieu-tra.txt ] || { printf "# Phieu dieu tra (Blue) - dien SO sau moi dau \"=\" (xem goi y trong read_first)\nD1=\nD2=\nD3=\nD4=\nD5=\n" > /home/analyst/dieu-tra.txt; chown analyst:analyst /home/analyst/dieu-tra.txt; chmod 644 /home/analyst/dieu-tra.txt; }'
 
 exit 0
