@@ -13,7 +13,7 @@ cua HOM QUA da nam san trong he thong. Hay hoc cach TIM CAU TRA LOI trong do.
 ------------------------------------------------------------------------
   - Firefox tu mo trang:  https://172.20.0.20
     (Lan dau bao chung chi: Advanced -> Accept the Risk / Add Exception)
-  - Dang nhap:   analyst / analyst
+  - Dang nhap:   admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
   - Vao muc "Discover" (hoac Threat Hunting -> Events). Chon index pattern
     "wazuh-alerts-*" neu duoc hoi.
   - DAT KHOANG THOI GIAN (goc tren ben phai) = "Yesterday" (hoac Last 24 hours)

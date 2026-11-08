@@ -15,7 +15,7 @@ Cai gi LECH khoi nhung muc tren -> dang ngo.
 ------------------------------------------------------------------------
 0) MO DASHBOARD
 ------------------------------------------------------------------------
-  - Firefox tu mo https://172.20.0.20 ; dang nhap:  analyst / analyst
+  - Firefox tu mo https://172.20.0.20 ; dang nhap:  admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
   - Discover, index "wazuh-alerts-*".
   - !!! DAT THOI GIAN = "Last 7 days" (du lieu trai 7 ngay, khong phai 1 ngay).
   - Banner "API offline" -> BO QUA.

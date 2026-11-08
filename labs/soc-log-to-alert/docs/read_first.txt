@@ -21,7 +21,7 @@ PIPELINE CUA WAZUH (hoc ky - co cau hoi)
 ------------------------------------------------------------------------
 0) MO DASHBOARD + CACH GIAI PHAU 1 ALERT
 ------------------------------------------------------------------------
-  - Firefox tu mo https://172.20.0.20 ; dang nhap:  analyst / analyst
+  - Firefox tu mo https://172.20.0.20 ; dang nhap:  admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
   - Discover, index "wazuh-alerts-*", thoi gian = Yesterday.
   - Bam MUI TEN ">" dau mot dong de MO RONG -> doc: full_log (log tho), decoder.name,
     rule.id, rule.level, rule.description, data.srcip, data.srcuser, data.id ...
