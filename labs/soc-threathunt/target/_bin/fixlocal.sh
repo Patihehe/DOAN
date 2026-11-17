@@ -54,19 +54,24 @@ S systemctl restart wazuh-agent 2>/dev/null || S service wazuh-agent restart 2>/
 S useradd -m -s /bin/bash analyst 2>/dev/null
 S bash -c 'echo "analyst:analyst" | chpasswd'
 S usermod -aG sudo analyst 2>/dev/null
-cat > /tmp/findings.txt <<'FND'
-# BAO CAO SAN MOI DE DOA (Threat Hunting) - dien gia tri ban TU TIM DUOC (KEY=value):
-# C2_IP      : dia chi may tan cong (C2)
-# C2_PORT    : cong C2 (moi may mot khac - tu san ra)
-# MAL_PROC   : ten tien trinh doc (nguy trang)
-# MAL_SCRIPT : duong dan script/implant doc
-C2_IP=
-C2_PORT=
-MAL_PROC=
-MAL_SCRIPT=
+cat > /tmp/dieu-tra.txt <<'FND'
+# PHIEU SAN (Threat Hunting) - dien SO sau moi dau "=" (xem goi y trong read_first):
+# H1 = octet cuoi IP C2 (172.20.0.X -> ghi X)
+# H2 = tien trinh NGUY TRANG dang giu ket noi C2
+#        1 sshd   2 [kworker/0:2]   3 systemd   4 cron
+# H3 = co che DUY TRI (persistence) cua implant
+#        1 /etc/crontab   2 /etc/cron.d/sysmon   3 ~/.bashrc   4 /etc/rc.local
+# H4 = field trong netmon.log PHAN BIET dong DOC voi dong LANH TINH
+#        1 proc=monitor   2 proc=kworker-helper   3 dport   4 hostname
+# H5 = cong C2 (ca nhan hoa - tu san trong log giam sat / ss)
+H1=
+H2=
+H3=
+H4=
+H5=
 FND
-S cp /tmp/findings.txt /home/analyst/findings.txt
-S chown analyst:analyst /home/analyst/findings.txt
-S chmod 644 /home/analyst/findings.txt
+S cp /tmp/dieu-tra.txt /home/analyst/dieu-tra.txt
+S chown analyst:analyst /home/analyst/dieu-tra.txt
+S chmod 644 /home/analyst/dieu-tra.txt
 
 exit 0

@@ -12,7 +12,7 @@ phai TU SAN ra giua dong nhieu. Day la 3 ky nang SOC noi tiep nhau:
   Wazuh de he thong tu canh bao; (3) UNG PHO - cat dut C2 mot cach CHINH XAC, khong lam hong
   dich vu lanh tinh.
 
-*** Lan dau cho siem cai Wazuh (~8-10'):  tail -f /var/log/wazuh-install.log ***
+*** Lan dau doi siem khoi dong Wazuh (~1-2' - anh chung da cai san). ***
 
 2. MUC TIEU HOC TAP (OBJECTIVES)
 --------------------------------------------------------------------------------
@@ -42,37 +42,63 @@ phai TU SAN ra giua dong nhieu. Day la 3 ky nang SOC noi tiep nhau:
   target   (172.20.0.10)     -- may nhiem; co Wazuh agent + log giam sat /var/log/netmon.log
   siem     (172.20.0.20)     -- Wazuh (dashboard https://172.20.0.20) + noi ban VIET LUAT
   defender (172.20.0.30)     -- tram cua ban: Firefox + SSH
+  Dang nhap dashboard SIEM:  https://172.20.0.20   admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
+     (mat khau admin CO DINH baked trong anh chung soc-wazuh - giong Bai 1-3/7.)
   Dang nhap target de dieu tra:  ssh analyst@target   (mat khau: analyst)
 
 5. NHIEM VU (TASKS)
 --------------------------------------------------------------------------------
---- PHA 1: SAN (tim ra cai doc giua nhieu) ---
-  a. Dashboard Wazuh (admin / tren siem: sudo cat /root/wazuh-admin-credentials.txt):
-     - Integrity Monitoring (FIM): co FILE LA bi them/sua o dau? (goi y: thu muc nhi phan he thong,
-       thu muc cron, /tmp).
-     - Xem log giam sat ket noi (Threat Hunting / Security events): co dong ket noi (netmon) nao ra
-       mot dich DANG NGO khong? Phan biet dich LANH TINH (may SIEM) voi dich LA.
-  b. Tren target (ssh analyst@target), xac nhan bang cong cu he thong:
-     - Liet ke ket noi dang mo + tien trinh so huu (goi y: cong cu liet ke socket, co kem tien trinh).
-     - Chu y tien trinh NGUY TRANG: ten giong tien trinh he thong nhung co ket noi mang.
-  c. Ghi vao /home/analyst/findings.txt: C2_IP, C2_PORT (cong cua MAY BAN - tu san), MAL_PROC
-     (ten tien trinh doc), MAL_SCRIPT (duong dan implant).
+--- PHA 1: SAN (tim ra cai doc giua nhieu) -> GHI PHIEU ~/dieu-tra.txt ---
+  File khung ~/dieu-tra.txt DA CO SAN tren target (H1=..H5= de trong). SSH sang dien SO:
+     ssh analyst@target   ->   nano ~/dieu-tra.txt
+  5 cau can tra loi (ghi SO sau moi dau '='):
+     H1. Octet cuoi IP C2?                          (172.20.0.X -> ghi X)
+     H2. Tien trinh NGUY TRANG giu ket noi C2?      1 sshd  2 [kworker/0:2]  3 systemd  4 cron
+     H3. Co che DUY TRI (persistence) cua implant?  1 /etc/crontab  2 /etc/cron.d/sysmon  3 ~/.bashrc  4 /etc/rc.local
+     H4. Field trong netmon.log phan biet DOC/LANH? 1 proc=monitor  2 proc=kworker-helper  3 dport  4 hostname
+     H5. Cong C2 (ca nhan hoa - tu san)?
+
+  GOI Y 3 CAP:
+   Cap 1 (huong di):
+     - Dashboard Wazuh FIM: tab INVENTORY = anh chup file DANG duoc giam sat (thay implant trong
+       /etc/cron.d, /usr/local/bin - ca khi no cai TRUOC luc bat FIM). Tab EVENTS = thay doi theo
+       thoi gian (chu yeu /tmp doi moi phut). Security events cho thay dong 'netmon: conn' ra dich la.
+       (Luu y: file cai TRUOC khi agent canh FIM nam trong baseline -> KHONG bao 'added' o Events,
+        nhung VAN hien o Inventory. Events=su kien theo thoi gian; Inventory=trang thai hien tai.)
+     - Tren target: liet ke socket kem tien trinh so huu; chu y tien trinh ten giong he thong
+       nhung LAI co ket noi mang (tien trinh kernel THAT khong co ket noi mang).
+   Cap 2 (lenh cu the, tren ssh analyst@target):
+     - Ket noi C2 + PID:      sudo ss -tnp | grep 172.20.0.5   (lay PID giu ket noi + cong C2)
+     - Ten nguy trang (H2):   ps -p <PID> -o pid,comm,args
+       (ss/comm hien 'bash'; nhung argv[0] bi gia thanh [kworker/0:2] - exec -a chi doi argv[0].
+        Kernel thread [kworker/...] THAT khong bao gio co ket noi mang -> day la cach phat hien.)
+     - Log beacon:            grep 'dst=172.20.0.5' /var/log/netmon.log | tail
+       (so sanh dong DOC voi dong LANH TINH - chung khac nhau o field 'proc=')
+     - Persistence:           cat /etc/cron.d/sysmon        (cron nao chay implant moi phut)
+     - Cong C2 (H5):          so sau 'dport=' trong CHINH dong beacon dst=172.20.0.5
+   Cap 3 (dap an huong dan):
+     H1=5. H2=2 ([kworker/0:2]). H3=2 (/etc/cron.d/sysmon). H4=2 (proc=kworker-helper). H5=<cong tu san>.
 
 --- PHA 2: PHAT HIEN (tu viet luat Wazuh) ---
+  Wazuh chi ghi ALERT khi co RULE khop. Chua rule nao biet dong 'netmon: conn' -> phai TU viet.
   Tren SIEM (ssh/terminal siem), sua /var/ossec/etc/rules/local_rules.xml, THEM mot luat (id >= 100000)
   khop dong log beacon toi C2 va dat level canh bao. Khung vi du (tu dien IP C2 BAN da tim):
       <group name="local,threat_hunt,">
         <rule id="100200" level="12">
-          <match>netmon: conn dst=&lt;IP_C2_BAN_TIM&gt;</match>
+          <match>conn dst=&lt;IP_C2_BAN_TIM&gt;</match>
           <description>C2 beacon detected</description>
           <group>c2_detected,</group>
         </rule>
       </group>
-  - Kiem thu: `/var/ossec/bin/wazuh-logtest`  (dan 1 dong netmon tu /var/log/netmon.log -> xem luat
-    co khop + dung level khong).
-  - Nap luat: `sudo systemctl restart wazuh-manager`.
-  - Xac nhan: tren dashboard (Security events) thay canh bao tu luat cua ban no len.
-  *** Lam PHA 2 KHI beacon con hoat dong (truoc khi chan) de luat co du lieu ma no. ***
+    (Dung 'conn dst=...' - KHONG de 'netmon:' trong <match> vi 'netmon' bi tach lam program_name.
+     level 12 = cao (Wazuh chi alert khi level >= 3). id phai >= 100000 = dai rule tu viet.)
+  - Kiem thu TRUOC (chua can restart):  sudo /var/ossec/bin/wazuh-logtest
+       -> dan 1 dong netmon that (grep 'dst=172.20.0.5' /var/log/netmon.log | tail -1 tren target)
+       -> output phai hien  Rule id: '100200'  +  Level: 12. Sai thi sua <match> roi test lai.
+  - Nap luat that: `sudo systemctl restart wazuh-manager`  (logtest chi thu, restart moi ap dung).
+  - Xac nhan: sau ~1' (beacon ghi moi phut) -> dashboard Security events thay alert; hoac tren siem
+       sudo grep 'netmon: conn dst=172.20.0.5' /var/ossec/logs/alerts/alerts.log | tail
+  *** Nen lam PHA 2 truoc PHA 3 (dung trinh tu SOC: phat hien -> ung pho). ***
 
 --- PHA 3: UNG PHO PHAU THUAT ---
   - CHAN dung IP C2 o tang mang (goi y: luat tuong lua chan theo dia chi dich la IP C2).
@@ -86,8 +112,7 @@ phai TU SAN ra giua dong nhieu. Day la 3 ky nang SOC noi tiep nhau:
 --------------------------------------------------------------------------------
   checkwork -> tu kiem tra ; stoplab -> nop bai.
   Cac muc cham (chi cham VIEC BAN LAM):
-    - reported       : dung C2 IP + CONG ca nhan hoa + ten tien trinh doc.
+    - h1..h5         : phieu San ~/dieu-tra.txt (moi cau 1 diem; nham dung toi thieu 4/5).
     - detection_rule : luat Wazuh tu viet NO canh bao tren beacon.
     - contained      : da CHAN IP C2 (172.20.0.5) bang iptables.
     - sla_ok         : dich vu giam sat lanh tinh (ket noi toi SIEM) van song (khong chan bua).
-    - incident_resolved : xay duoc phat hien + cat C2 + khong lam hong dich vu lanh tinh.

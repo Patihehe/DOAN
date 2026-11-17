@@ -1,5 +1,5 @@
 SOC Lab - Threat Hunting: San -> Phat hien -> Ung pho.
 May target bi cai implant C2 nguy trang (beacon ve may tan cong), lan giua cac ket noi lanh tinh.
-Nhiem vu 3 pha: (1) SAN ra cai doc giua nhieu + bao cao IOC (C2 IP + cong ca nhan hoa + tien trinh);
-(2) PHAT HIEN - tu viet luat Wazuh bat beacon; (3) UNG PHO phau thuat - chan dung IP C2 ma khong
-lam dut dich vu giam sat lanh tinh (SLA).
+Nhiem vu 3 pha: (1) SAN ra cai doc giua nhieu + ghi phieu San 5 cau (~/dieu-tra.txt: IP/tien trinh
+nguy trang/persistence/field phan biet/cong ca nhan hoa); (2) PHAT HIEN - tu viet luat Wazuh bat
+beacon; (3) UNG PHO phau thuat - chan dung IP C2 ma khong lam dut dich vu giam sat lanh tinh (SLA).

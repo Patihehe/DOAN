@@ -14,12 +14,16 @@ sudo -n iptables -S 2>/dev/null | grep -qE '172\.20\.0\.5(/32)?.*-j (DROP|REJECT
 SL=$(ss -tn 2>/dev/null | grep -c '172.20.0.20:')
 [ "${SL:-0}" -ge 1 ] && echo "SLA_OK"
 
-# Bao cao IOC (chi in OK). Cong ky vong lay tu CHINH dong beacon trong log giam sat
-# (/var/log/netmon.log, 644 - world readable; cong von la IOC phai san ra, khong phai bi mat).
-F=/home/analyst/findings.txt
-grep '^C2_IP=' "$F" 2>/dev/null | grep -q '172.20.0.5' && echo "REP_IP_OK"
+# Phieu San: H1..H4 cham o goals.config (dap an co dinh). H5 (cong ca nhan hoa) doi chieu
+# voi cong C2 THAT lay tu CHINH dong beacon trong /var/log/netmon.log (644, world-readable;
+# cong von la IOC phai san ra). prestop KHONG tu phan H1..H4 - chi in phieu THO.
+F=/home/analyst/dieu-tra.txt
 TP=$(grep 'dst=172.20.0.5' /var/log/netmon.log 2>/dev/null | grep -oE 'dport=[0-9]+' | grep -oE '[0-9]+' | head -1)
-[ -n "$TP" ] && grep '^C2_PORT=' "$F" 2>/dev/null | grep -q "$TP" && echo "REP_PORT_OK"
-grep '^MAL_PROC=' "$F" 2>/dev/null | grep -qi 'kworker' && echo "REP_PROC_OK"
+SP=$(grep -E '^H5=' "$F" 2>/dev/null | grep -oE '=[0-9]+' | grep -oE '[0-9]+' | head -1)
+[ -n "$TP" ] && [ "$SP" = "$TP" ] && echo "H5_OK"
+
+echo "=== dieu-tra (phieu San cua analyst) ==="
+sudo -n cat "$F" 2>/dev/null
+cat "$F" 2>/dev/null
 
 exit 0
