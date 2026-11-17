@@ -119,7 +119,7 @@ Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Dx=<so>  :
 5) NOP BAI
 ------------------------------------------------------------------------
   checkwork  -> can dat CA 3:
-     * webshell_dieutra = Y  (dieu tra Blue dung >= 4/5 cau)
+     * d1..d5  (dieu tra Blue, nham dung >= 4/5 cau)
      * blue_patched     = Y  (he A HET RCE + sach webshell + con SLA)
      * red_flag         = Y  (lay duoc flag he B)
   Xong: stoplab

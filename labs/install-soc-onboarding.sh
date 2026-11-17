@@ -146,7 +146,7 @@ cua HOM QUA da nam san trong he thong. Hay hoc cach TIM CAU TRA LOI trong do.
   - Tren terminal defender:  checkwork   (tu kiem tra - khong lo dap an)
   - Cac muc cham:
        q1..q8      = tung cau dung/sai
-       bai1_partA  = Y khi dung >= 7/8 cau
+       q1..q8  (Phan A, nham dung >= 7/8 cau)
        bai1_partB  = Y khi da luu >= 3 bieu do ten "bai1"
   - Xong xuoi:  stoplab   (nop bai)
 
@@ -196,8 +196,6 @@ q6 = matchany : integer_equal : _c6 : result._gt6
 q7 = matchany : integer_equal : _c7 : result._gt7
 q8 = matchany : integer_equal : _c8 : result._gt8
 
-# Dat Phan A khi dung >= 7/8 (count_greater: so goal TRUE > 6)
-bai1_partA = count_greater : 6 : (q1, q2, q3, q4, q5, q6, q7, q8)
 
 # --- Phan B: da luu >= 3 visualization/dashboard ten "bai1" ---
 bai1_partB = boolean : _partb

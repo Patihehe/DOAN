@@ -134,7 +134,7 @@ PIPELINE CUA WAZUH (hoc ky - co cau hoi)
 ------------------------------------------------------------------------
 4) NOP BAI
 ------------------------------------------------------------------------
-  checkwork  ; cac muc: q1..q8, bai2_partA (dung >=7/8), bai2_partB (>=2 bieu do bai2)
+  checkwork  ; cac muc: q1..q8 (nham >=7/8), bai2_partB (>=2 bieu do bai2)
   Xong:  stoplab
 __LT_04__
 
@@ -179,8 +179,6 @@ q6 = matchany : integer_equal : _c6 : result._gt6
 q7 = matchany : integer_equal : _c7 : result._gt7
 q8 = matchany : integer_equal : _c8 : result._gt8
 
-# Dat Phan A khi dung >= 7/8
-bai2_partA = count_greater : 6 : (q1, q2, q3, q4, q5, q6, q7, q8)
 
 # --- Phan B: da luu >= 2 visualization/dashboard ten "bai2" ---
 bai2_partB = boolean : _partb

@@ -90,6 +90,6 @@ Tra loi 6 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Cx=<so>  :
 5) NOP BAI
 ------------------------------------------------------------------------
   checkwork  -> can dat:
-     * bai4_dieutra   (dieu tra dung >= 4/5 cau)
+     * q1..q5  (dieu tra, nham dung >= 4/5 cau)
      * incident_resolved = Y  (da CHAN + KHOA + go sach backdoor & cron)
   Xong: stoplab

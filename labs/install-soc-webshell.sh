@@ -366,7 +366,7 @@ Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Dx=<so>  :
 5) NOP BAI
 ------------------------------------------------------------------------
   checkwork  -> can dat CA 3:
-     * webshell_dieutra = Y  (dieu tra Blue dung >= 4/5 cau)
+     * d1..d5  (dieu tra Blue, nham dung >= 4/5 cau)
      * blue_patched     = Y  (he A HET RCE + sach webshell + con SLA)
      * red_flag         = Y  (lay duoc flag he B)
   Xong: stoplab
@@ -652,8 +652,6 @@ d2 = matchany : integer_equal : _d2 : answer=2
 d3 = matchany : integer_equal : _d3 : answer=3
 d4 = matchany : integer_equal : _d4 : answer=2
 d5 = matchany : integer_equal : _d5 : answer=2
-# Dat phan dieu tra khi dung >= 4/5
-webshell_dieutra = count_greater : 3 : (d1, d2, d3, d4, d5)
 
 # ===== UNG PHO BLUE + KHAI THAC RED (giu nguyen logic cham) =====
 # BLUE: he A HET RCE (.phtml khong con thuc thi) + sach webshell + con SLA
@@ -661,7 +659,7 @@ blue_patched = boolean : ( _a_marker and _sla and_not _rce_open and_not _ws_left
 # RED: lay FLAG he B qua upload webshell -> RCE
 red_flag     = boolean : _flag
 # (Bo 'mission_complete' - chi la AND lap lai cua blue_patched + red_flag, khong them thong tin.
-#  Dat bai = webshell_dieutra Y + blue_patched Y + red_flag Y.)
+#  Dat bai = d1..d5 (>=4/5) + blue_patched + red_flag.)
 __EOF_WS_9x2k__
 cat > "$LAB/instr_config/results.config" <<'__EOF_WS_9x2k__'
 # results.config - Hybrid Web Shell Upload -> RCE (PhotoBox)

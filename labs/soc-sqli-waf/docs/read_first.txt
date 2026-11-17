@@ -107,6 +107,6 @@ Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Wx=<so>  :
 5) NOP BAI
 ------------------------------------------------------------------------
   checkwork  -> can dat:
-     * bai5_dieutra   (dieu tra dung >= 4/5 cau)
+     * q1..q5  (dieu tra, nham dung >= 4/5 cau)
      * incident_resolved = Y  (WAF bat + chan dung SQLi + KHONG chan nham)
   Xong: stoplab

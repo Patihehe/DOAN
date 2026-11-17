@@ -132,7 +132,7 @@ Cai gi LECH khoi nhung muc tren -> dang ngo.
 ------------------------------------------------------------------------
 4) NOP BAI
 ------------------------------------------------------------------------
-  checkwork ; muc: q1..q8, bai3_partA (dung >=7/8), bai3_partB (>=2 bieu do bai3)
+  checkwork ; muc: q1..q8 (nham >=7/8), bai3_partB (>=2 bieu do bai3)
   Xong: stoplab
 __LT_04__
 
@@ -172,8 +172,6 @@ q6 = matchany : integer_equal : _c6 : result._gt6
 q7 = matchany : integer_equal : _c7 : result._gt7
 q8 = matchany : integer_equal : _c8 : result._gt8
 
-# Dat Phan A khi dung >= 7/8
-bai3_partA = count_greater : 6 : (q1, q2, q3, q4, q5, q6, q7, q8)
 
 # Phan B: >= 2 visualization/dashboard ten "bai3"
 bai3_partB = boolean : _partb

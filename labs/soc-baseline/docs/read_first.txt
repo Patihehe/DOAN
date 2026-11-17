@@ -70,5 +70,5 @@ Cai gi LECH khoi nhung muc tren -> dang ngo.
 ------------------------------------------------------------------------
 4) NOP BAI
 ------------------------------------------------------------------------
-  checkwork ; muc: q1..q8, bai3_partA (dung >=7/8), bai3_partB (>=2 bieu do bai3)
+  checkwork ; muc: q1..q8 (nham >=7/8), bai3_partB (>=2 bieu do bai3)
   Xong: stoplab

@@ -71,5 +71,5 @@ PIPELINE CUA WAZUH (hoc ky - co cau hoi)
 ------------------------------------------------------------------------
 4) NOP BAI
 ------------------------------------------------------------------------
-  checkwork  ; cac muc: q1..q8, bai2_partA (dung >=7/8), bai2_partB (>=2 bieu do bai2)
+  checkwork  ; cac muc: q1..q8 (nham >=7/8), bai2_partB (>=2 bieu do bai2)
   Xong:  stoplab

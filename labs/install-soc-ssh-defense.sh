@@ -179,7 +179,7 @@ Tra loi 6 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Cx=<so>  :
 5) NOP BAI
 ------------------------------------------------------------------------
   checkwork  -> can dat:
-     * bai4_dieutra   (dieu tra dung >= 4/5 cau)
+     * q1..q5  (dieu tra, nham dung >= 4/5 cau)
      * incident_resolved = Y  (da CHAN + KHOA + go sach backdoor & cron)
   Xong: stoplab
 __EOF_KB1_a7f3__
@@ -444,8 +444,6 @@ q2 = matchany : integer_equal : _c2 : parameter.EMPID
 q3 = matchany : integer_equal : _c3 : answer=2
 q4 = matchany : integer_equal : _c4 : parameter.BKDR
 q5 = matchany : integer_equal : _c5 : answer=2
-# Dat Phan A khi dung >= 4/5
-bai4_dieutra = count_greater : 3 : (q1, q2, q3, q4, q5)
 
 # ===== PHAN B: UNG PHO (chi cham viec SV THUC SU lam) =====
 # (Da bo detected_attack/account_compromised/siem_detected/agent_connected:

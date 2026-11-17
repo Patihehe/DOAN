@@ -464,7 +464,7 @@ Tra loi 5 cau, GHI SO sau moi dau '=', moi cau 1 dong dang  Wx=<so>  :
 5) NOP BAI
 ------------------------------------------------------------------------
   checkwork  -> can dat:
-     * bai5_dieutra   (dieu tra dung >= 4/5 cau)
+     * q1..q5  (dieu tra, nham dung >= 4/5 cau)
      * incident_resolved = Y  (WAF bat + chan dung SQLi + KHONG chan nham)
   Xong: stoplab
 __EOF_SQLI_9z3k__
@@ -481,8 +481,6 @@ q2 = matchany : integer_equal : _w2 : answer=2
 q3 = matchany : integer_equal : _w3 : answer=2
 q4 = matchany : integer_equal : _w4 : answer=3
 q5 = matchany : integer_equal : _w5 : parameter.SECRETVAL
-# Dat Phan A khi dung >= 4/5
-bai5_dieutra = count_greater : 3 : (q1, q2, q3, q4, q5)
 
 # ===== PHAN B: UNG PHO (WAF) - chi cham viec SV THUC SU lam =====
 # (Da bo attack_detected/agent_connected/attack_in_log: nhung cai do tu dung

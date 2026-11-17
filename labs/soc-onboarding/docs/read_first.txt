@@ -76,7 +76,7 @@ cua HOM QUA da nam san trong he thong. Hay hoc cach TIM CAU TRA LOI trong do.
   - Tren terminal defender:  checkwork   (tu kiem tra - khong lo dap an)
   - Cac muc cham:
        q1..q8      = tung cau dung/sai
-       bai1_partA  = Y khi dung >= 7/8 cau
+       q1..q8  (Phan A, nham dung >= 7/8 cau)
        bai1_partB  = Y khi da luu >= 3 bieu do ten "bai1"
   - Xong xuoi:  stoplab   (nop bai)
 
