@@ -1,0 +1,6 @@
+SOC Lab - DNS Tunneling / Data Exfiltration: Dieu tra -> Phat hien -> Ung pho.
+Ke tan cong tuon du lieu nhay cam (/opt/company/secret_vault.txt) ra ngoai qua DNS tunneling:
+ma hoa base64 roi gan lam subdomain cua exfil-<EXID>.attacker.com, ban don dap toi DNS ma 172.20.0.5.
+Log /var/log/dns-queries.log lan CA truy van LANH TINH (nhieu). Nhiem vu 3 pha: (1) DIEU TRA + GIAI MA
+5 IOC (~/findings.txt); (2) PHAT HIEN - tu viet rule Wazuh TAN SUAT/DO DAI (stateful) bat tunneling
+ma KHONG bao gia tren DNS lanh; (3) UNG PHO - chan DNS C2 + diet ma doc + khoa vault, giu SLA.

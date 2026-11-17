@@ -1,0 +1,18 @@
+#!/bin/bash
+# Chay luc checkwork/stoplab tren siem. Cham PHA 2 (detection engineering):
+# Khong built-in rule nao biet toi /var/log/dns-queries.log, nen MOI alert tren log do la tu LUAT CUA SV.
+#   DETECTION_OK : rule SV da NO tren truy van exfil (domain attacker.com)
+#   FP_DETECTED  : rule SV BAO GIA tren truy van LANH TINH (domain he thong) -> rule qua rong
+trap "echo Timed out; exit" SIGTERM
+echo "PRESTOP_MARKER_SIEM"
+
+A=/var/ossec/logs/alerts/alerts.log
+
+# Detection: co alert nao khop truy van toi C2 exfil (ten mien attacker.com)?
+sudo -n grep -aE 'attacker\.com' "$A" 2>/dev/null | grep -q . && echo "DETECTION_OK"
+
+# False positive: co alert nao khop truy van LANH TINH (ten mien he thong hop le)?
+sudo -n grep -aE 'update\.ubuntu\.com|api\.company-x\.vn|packages\.wazuh\.com|pool\.ntp\.org|security\.debian\.org' "$A" 2>/dev/null \
+  | grep -q . && echo "FP_DETECTED"
+
+exit 0

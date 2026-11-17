@@ -1,0 +1,138 @@
+================================================================================
+ SOC LAB: DNS TUNNELING / DATA EXFILTRATION - DIEU TRA -> PHAT HIEN -> UNG PHO
+================================================================================
+
+1. TONG QUAN
+--------------------------------------------------------------------------------
+Sau khi SOC chan het ket noi truc tiep ra ngoai (Bai 10), ke tan cong doi chien thuat:
+lam dung DNS (cong 53) de tuon du lieu bi mat /opt/company/secret_vault.txt ra ngoai bang
+DNS TUNNELING. Script ma doc doc tung dong vault -> ma hoa base64 -> gan lam SUBDOMAIN cua
+ten mien C2 exfil-<so>.attacker.com -> ban DON DAP toi DNS ma 172.20.0.5.
+
+Moi truy van DNS tren target ghi vao /var/log/dns-queries.log (Wazuh giam sat). Log nay LAN
+CA truy van LANH TINH (DNS he thong binh thuong: subdomain NGAN, toi DNS that 172.20.0.1) -> nhieu nen.
+=> KHONG the viet rule bua kieu "thay query[A] la bao" (se bao gia len luong lanh tinh).
+
+*** Lan dau doi siem khoi dong Wazuh (~1-2' - anh chung da cai san). ***
+
+2. MUC TIEU HOC TAP
+--------------------------------------------------------------------------------
+  - Nhan dang DNS tunneling qua HANH VI: subdomain dai/entropy cao (base64) + tan suat don dap.
+  - Giai ma payload base64 de chung minh du lieu gi bi ro ri.
+  - Viet rule Wazuh STATEFUL (tan suat) va/hoac DO DAI, do PRECISION (khong bao gia tren DNS lanh).
+  - Ung pho phau thuat: chan DNS C2 ma khong cat DNS hop le / giam sat.
+
+3. KIEN THUC NEN
+--------------------------------------------------------------------------------
+* DNS exfiltration (MITRE T1048.003): du lieu duoc nhet vao subdomain cua ten mien ke tan cong
+  kiem soat; may nan nhan "phan giai" ten mien do -> du lieu chay ve DNS cua ke tan cong.
+* Dau hieu san: nhan subdomain dau rat DAI (chuoi base64 lien tuc >= 24 ky tu), lap lai DON DAP;
+  khac han ten mien hop le (ngan, it, toi DNS noi bo).
+* Wazuh rule tan suat (stateful correlation): rule CHA match 1 su kien; rule CON dung
+  <if_matched_sid> + frequency="N" timeframe="T" -> chi NO khi rule cha lap >= N lan trong T giay.
+  <regex> (os_regex) khop mau; <program_name> loc theo ten tien trinh ghi log.
+  LUU Y: anh chung soc-wazuh KHONG ho tro tag <pcre2> (bao "Invalid option 'pcre2'") -> DUNG <regex>.
+  os_regex KHONG co {n,} -> bat "chuoi DAI" bang cach LAP \w (vd 20 lan) roi "+". \w gom A-Za-z0-9-_.
+* base64 trong DNS: ky tu "=" (padding) bi bo vi khong hop le trong DNS -> khi giai ma phai PAD lai.
+
+4. MOI TRUONG & DANG NHAP
+--------------------------------------------------------------------------------
+  attacker (172.20.0.5, AN) -- DNS ma (dnsmasq) nhan du lieu ro ri
+  target   (172.20.0.10)    -- may nhiem; Wazuh agent + log /var/log/dns-queries.log
+  siem     (172.20.0.20)    -- Wazuh (dashboard) + noi ban VIET RULE
+  defender (172.20.0.30)    -- tram cua ban: Firefox + SSH
+  DNS hop le he thong: 172.20.0.1 (KHONG duoc chan)
+  Dang nhap dashboard SIEM:  https://172.20.0.20   admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
+  Dang nhap target:  ssh analyst@target   (mat khau: analyst)
+
+5. NHIEM VU
+--------------------------------------------------------------------------------
+--- PHA 1: DIEU TRA + GIAI MA -> GHI ~/findings.txt (5 IOC) ---
+  Mo ~/findings.txt (co san tren target) va dien 5 truong:
+     DNS_C2_IP    = IP may DNS ma nhan du lieu
+     EXFIL_DOMAIN = ten mien goc lam duong ham (dang exfil-<so>.attacker.com)
+     LEAKED_SECRET= gia tri FLAG_SECRET sau khi base64 -d chuoi subdomain trong log
+     MAL_SCRIPT   = duong dan tuyet doi script ma doc
+     PERSIST_CRON = duong dan tep cron duy tri ma doc
+
+  GOI Y 3 CAP:
+   Cap 1 (huong di):
+     - Dashboard/Log: loc dns-queries.log, phan biet truy van DAI bat thuong (base64) voi truy van ngan.
+       Nhin dich: truy van doc di toi 172.20.0.5; lanh tinh di toi 172.20.0.1.
+     - Tren target: tim tien trinh/script la va cron duy tri no.
+   Cap 2 (lenh cu the, ssh analyst@target):
+     - Log exfil:   grep 'to 172.20.0.5' /var/log/dns-queries.log | tail
+     - Script+cron: ls -la /usr/local/bin/.dns_exfil.sh ; cat /etc/cron.d/dns-sync
+                    (hoac: pgrep -af dns_exfil ; grep -R dns_exfil /etc/cron.d)
+     - GIAI MA secret: lay chuoi truoc ".exfil-" trong 1 dong exfil, base64 -d (nho PAD "="):
+         B='<chuoi_base64>'
+         python3 -c "import base64,sys;s=sys.argv[1];print(base64.b64decode(s+'='*(-len(s)%4)).decode(errors='replace'))" "$B"
+       -> tim dong FLAG_SECRET=... ; LEAKED_SECRET la phan sau dau '='.
+   Cap 3 (dap an huong dan):
+     DNS_C2_IP=172.20.0.5 ; EXFIL_DOMAIN=exfil-<so>.attacker.com ;
+     MAL_SCRIPT=/usr/local/bin/.dns_exfil.sh ; PERSIST_CRON=/etc/cron.d/dns-sync ;
+     LEAKED_SECRET = giai ma ra (dang PTIT_VAULT_<so>, so NAY khac so trong domain).
+
+--- PHA 2: PHAT HIEN (viet rule Wazuh - tan suat / do dai) ---
+  Wazuh chi alert khi co RULE khop. Tren SIEM sua /var/ossec/etc/rules/local_rules.xml (id >= 100000).
+  Muc tieu: bat tunneling (subdomain dai + don dap) NHUNG KHONG bao gia tren DNS lanh (update.ubuntu.com...).
+  Khung vi du (rule CHA do dai bang os_regex + rule CON tan suat):
+      <group name="local,dns_exfil,">
+        <rule id="100300" level="6">
+          <program_name>dns-client</program_name>
+          <regex>\w\w\w\w\w\w\w\w\w\w\w\w\w\w\w\w\w\w\w\w+</regex>
+          <description>Suspicious long DNS subdomain (possible tunneling)</description>
+        </rule>
+        <rule id="100301" level="12" frequency="4" timeframe="60">
+          <if_matched_sid>100300</if_matched_sid>
+          <description>DNS Exfiltration burst detected</description>
+          <mitre><id>T1048</id></mitre>
+          <group>dns_exfil_detected,</group>
+        </rule>
+      </group>
+  (20 lan \w + "+" = yeu cau >= 20 ky tu \w lien tuc -> chi nhan base64 DAI dinh; nhan lanh tinh
+   dai nhat ~9 ky tu (company-x, packages) -> KHONG dinh -> khong bao gia. os_regex khong co {n,}.)
+  (Neu ban Wazuh cua ban CO ho tro pcre2 thi co the dung gon: <pcre2>[A-Za-z0-9+/]{20,}\.</pcre2>.
+   Anh chung soc-wazuh bao "Invalid option 'pcre2'" -> PHAI dung <regex> os_regex nhu tren.)
+
+  --- LAY MAU TEST O DAU? -> lay DONG LOG THAT tu /var/log/dns-queries.log tren target ---
+  (Phai dan DONG LOG day du dung dinh dang syslog thi logtest moi parse ra program_name=dns-client;
+   dan moi "update.ubuntu.com" cut lun se KHONG test duoc.)
+    Tren target (ssh analyst@target), copy 2 dong mau:
+      + 1 dong EXFIL that (ket thuc "to 172.20.0.5") -> PHAI khop rule:
+          grep 'to 172.20.0.5' /var/log/dns-queries.log | tail -1
+      + 1 dong LANH TINH (ket thuc "to 172.20.0.1") -> PHAI KHONG khop:
+          grep 'to 172.20.0.1' /var/log/dns-queries.log | tail -1
+    Vi du dong EXFIL : Nov 17 10:30:01 target dns-client[1234]: query[A] RkxBR19T....exfil-1234.attacker.com from 172.20.0.10 to 172.20.0.5
+    Vi du dong LANH  : Nov 17 10:30:15 target dns-client[5678]: query[A] update.ubuntu.com from 172.20.0.10 to 172.20.0.1
+
+  --- CHAY TEST (tren SIEM): sudo /var/ossec/bin/wazuh-logtest ---
+    B1) DAN dong EXFIL -> phai hien **Rule: 100300** (canh bao subdomain dai).
+    B2) DAN LAI dong EXFIL do THEM 3 lan (tong >= 4 lan trong 60s) -> lan thu 4 ra THEM **Rule: 100301**
+        (vi 100301 la rule TAN SUAT, chi no khi rule cha lap du nguong frequency).
+    B3) DAN dong LANH TINH -> phai KHONG ra 100300/100301. Neu ra -> rule dang BAO GIA, siet pcre2 lai.
+  - Nap rule vao manager: sudo systemctl restart wazuh-manager.
+    *** QUAN TRONG: logtest NO chi chung to cu phap rule DUNG, CHUA phai da nap! Manager dang chay
+        chi load rule moi SAU KHI restart. Thieu buoc restart -> duong ong THAT khong sinh alert
+        -> cham detection_rule = N du logtest van no. ***
+  *** THU TU BAT BUOC: viet rule -> restart manager -> KIEM TRA da co alert that:
+        sudo grep -a attacker.com /var/ossec/logs/alerts/alerts.log   (phai co dong)
+      ROI MOI sang Pha 3. Neu diet exfil (Pha 3) TRUOC khi rule nap xong -> khong con truy van exfil
+      live de kich rule -> detection_rule khong bao gio Y. Lam Pha 2 XONG HAN roi moi Pha 3. ***
+
+--- PHA 3: UNG PHO PHAU THUAT (tren target) ---
+  1. Chan DUNG DNS C2:  sudo iptables -A OUTPUT -d 172.20.0.5 -j DROP
+     (TUYET DOI khong chan 172.20.0.1 = DNS that, hay 172.20.0.20 = SIEM -> se truot SLA.)
+  2. Diet ma doc + go persistence:
+     sudo rm -f /etc/cron.d/dns-sync /usr/local/bin/.dns_exfil.sh ; sudo pkill -f .dns_exfil.sh
+  3. Khoa file nhay cam:  sudo chmod 600 /opt/company/secret_vault.txt
+
+6. NOP BAI
+--------------------------------------------------------------------------------
+  checkwork -> tu kiem tra ; stoplab -> nop bai. Cac muc cham:
+    - ioc_c2/ioc_domain/ioc_secret/ioc_script/ioc_cron : 5 IOC dung (ioc_secret buoc giai ma base64).
+    - detection_rule : rule tu viet NO tren exfil VA KHONG bao gia tren DNS lanh.
+    - dns_blocked    : da chan DNS C2 (172.20.0.5).
+    - malware_removed: da diet tien trinh + xoa script + xoa cron.
+    - vault_secured  : da khoa quyen /opt/company/secret_vault.txt (600).
+    - sla_ok         : ket noi toi SIEM (172.20.0.20) van song.

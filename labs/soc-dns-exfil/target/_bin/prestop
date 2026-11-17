@@ -1,0 +1,42 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (cham diem).
+# Chi in co/OK, KHONG lo IOC that (nhat la SECRET) -> tranh SV doc prestop.stdout chep dap an.
+trap "echo Timed out; exit" SIGTERM
+echo "PRESTOP_MARKER"
+
+F=/home/analyst/findings.txt
+LOG=/var/log/dns-queries.log
+
+# --- UNG PHO 1: chan IP DNS C2 (.5) bang iptables (chan theo LUAT, khong dem ket noi) ---
+sudo -n iptables -S 2>/dev/null | grep -qE '172\.20\.0\.5(/32)?.*-j (DROP|REJECT)' && echo "CONTAINED"
+
+# --- SLA: ket noi lanh tinh toi SIEM (.20) con song (khong chan bua lam dut giam sat) ---
+SL=$(ss -tn 2>/dev/null | grep -c '172.20.0.20:')
+[ "${SL:-0}" -ge 1 ] && echo "SLA_OK"
+
+# --- UNG PHO 2: diet tien trinh exfil + go persistence (script + cron) ---
+pgrep -f '\.dns_exfil\.sh' >/dev/null 2>&1 || echo "EXFIL_PROC_STOPPED"
+{ [ ! -f /usr/local/bin/.dns_exfil.sh ] && [ ! -f /etc/cron.d/dns-sync ]; } && echo "EXFIL_PERSISTENCE_REMOVED"
+
+# --- UNG PHO 3: khoa quyen file nhay cam ---
+if sudo -n test -f /opt/company/secret_vault.txt 2>/dev/null; then
+  P=$(sudo -n stat -c '%a' /opt/company/secret_vault.txt 2>/dev/null)
+  case "$P" in 600|400|000|640|440) echo "VAULT_SECURED";; esac
+else
+  echo "VAULT_SECURED"   # da ma hoa/xoa ban ro
+fi
+
+# --- DIEU TRA: doi chieu 5 IOC trong findings.txt voi SU THAT ---
+# Ground-truth: domain lay tu LOG (ton tai ca sau ung pho); SECRET lay tu vault qua sudo (vault chmod van doc duoc).
+GTDOM=$(grep -oE 'exfil-[0-9]+\.attacker\.com' "$LOG" 2>/dev/null | head -1)
+GTSEC=$(sudo -n grep -oE 'PTIT_VAULT_[0-9]+' /opt/company/secret_vault.txt 2>/dev/null | head -1)
+val(){ sed -n "s/^$1=//p" "$F" 2>/dev/null | head -1 | tr -d ' \r'; }
+[ "$(val DNS_C2_IP)" = "172.20.0.5" ] && echo "REP_C2_OK"
+[ -n "$GTDOM" ] && [ "$(val EXFIL_DOMAIN)" = "$GTDOM" ] && echo "REP_DOMAIN_OK"
+[ -n "$GTSEC" ] && [ "$(val LEAKED_SECRET)" = "$GTSEC" ] && echo "REP_SECRET_OK"
+[ "$(val MAL_SCRIPT)" = "/usr/local/bin/.dns_exfil.sh" ] && echo "REP_SCRIPT_OK"
+[ "$(val PERSIST_CRON)" = "/etc/cron.d/dns-sync" ] && echo "REP_CRON_OK"
+
+echo "=== findings (bao cao cua analyst) ==="
+cat "$F" 2>/dev/null
+exit 0
