@@ -1,0 +1,148 @@
+================================================================================
+ SOC LAB: VIET CUSTOM DECODER CHO LOG LA (xpayd) - DIEU TRA -> BAT -> TINH CHINH -> UNG PHO
+================================================================================
+
+1. TONG QUAN / SU CO
+--------------------------------------------------------------------------------
+Dich vu "Cong thanh toan noi bo" xpayd chay tren target (172.20.0.10), ghi nhat ky giao dich vao
+/var/log/xpay/transactions.log va DA duoc cau hinh day ve siem (172.20.0.20) qua wazuh-agent.
+
+Sang nay Ke toan phat hien vi VIP cua Giam doc Tai chinh (cfo_<so>) bi RUT TROM 85.000.000 VND.
+DIEM MU: du agent van day log deu dan, Wazuh Dashboard KHONG co canh bao nao.
+NGUYEN NHAN KY THUAT: xpayd ghi log theo DINH DANG RIENG (do lap trinh vien tu dat). Wazuh KHONG co
+decoder nao hieu dong log nay -> pipeline Log -> DECODER -> Rule -> Alert DUT ngay o buoc DECODER.
+
+*** Lan dau doi siem khoi dong Wazuh (~1-2' - anh chung da cai san). ***
+
+2. MUC TIEU HOC TAP
+--------------------------------------------------------------------------------
+  - Hieu pipeline Wazuh: PreDecoder -> Decoder -> Rule. Biet khi nao can tu viet DECODER.
+  - Tu viet CUSTOM DECODER (parent + child) boc tach log dinh dang rieng thanh cac TRUONG.
+  - Viet CAY RULE phan cap dung truong da decode: tan suat (brute-force) + nguong gia tri (fraud).
+  - Tinh chinh de KHONG bao gia (same_source_ip, nguong so tien) tren giao dich hop le.
+
+3. KIEN THUC NEN (QUAN TRONG - Wazuh dung OS_Regex, KHONG phai PCRE)
+--------------------------------------------------------------------------------
+* Dinh dang 1 dong log xpayd (sau syslog header "... target xpayd[pid]:"):
+    TX#<id>|SRC=<ip>|USER=<user>|ACT=<LOGIN|TRANSFER|WITHDRAW>|RES=<OK|FAIL>|AMT=<so>|NOTE=<ghi chu>
+* Decoder: <program_name> o PARENT khop ten chuong trinh; CHILD dung <regex> + <order> de BOC truong.
+  Dung TEN TRUONG CHUAN cua Wazuh: srcip va dstuser -> moi kich hoat duoc <same_source_ip /> o rule.
+* *** Bay TEN TRUONG TINH (static) ***: cac ten action, status, srcip, dstip, id, url, protocol...
+  la TRUONG TINH danh rieng cua Wazuh. Rule KHONG duoc khop truong tinh bang <field name="...">
+  (bao loi "Field 'action' is static"). <field name=...> CHI dung cho truong DONG. Vi vay dat ten
+  2 truong trang thai la act, res (khong trung tu khoa) -> thanh truong dong -> khop bang <field> binh thuong.
+* *** Bay OS_Regex (y het loi pcre2 ban hay gap) ***
+   - <regex> va <field> dung OS_Regex, KHONG co {n,} va KHONG backtrack nhu PCRE.
+   - KHONG dung (\S+) de boc truong: \S khop ca dau '|' -> "nuot" lan sang truong sau -> boc sai.
+     DUNG \w (chu-so-gach_, KHONG khop '|') hoac \d -> tu dung o dung dau phan tach.
+   - KHONG dung ^\d{8,}$ cho "so tien >= 8 chu so": thay bang LAP \d 8 lan: ^\d\d\d\d\d\d\d\d
+     (150000/500000 = 6 chu so -> khong dinh; 85000000 = 8 chu so -> dinh; nguong = 10 trieu).
+
+4. MOI TRUONG & DANG NHAP
+--------------------------------------------------------------------------------
+  target (172.20.0.10) -- chay xpayd, log /var/log/xpay/transactions.log, wazuh-agent
+  attacker (172.20.0.5) -- nguon brute-force + rut tien (su co da xay ra, nam trong log)
+  siem    (172.20.0.20) -- Wazuh: noi VIET DECODER + RULE
+  defender(172.20.0.30) -- tram cua ban: Firefox + SSH
+  Dang nhap dashboard: https://172.20.0.20   admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
+  Dang nhap target:    ssh analyst@172.20.0.10   (mat khau: analyst)
+
+5. NHIEM VU
+--------------------------------------------------------------------------------
+--- PHA 1: DIEU TRA LOG THO -> dien ~/findings.txt (5 cau, tren target) ---
+  Mo ~/findings.txt (co san tren target) va dien 5 truong:
+     LOG_PROGRAM  = ten chuong trinh (program_name) sinh dong log la
+     ATTACKER_IP  = IP (SRC) brute-force + rut tien trai phep
+     VICTIM_USER  = tai khoan vi VIP bi chiem (dang cfo_<so>)
+     FRAUD_TX_ID  = ma giao dich lenh rut tien trai phep (dang TX#<so>)
+     FRAUD_AMOUNT = so tien bi rut trai phep (chi so)
+  GOI Y:
+   Cap 1: xem log tho; nhan ra 3 luong (giao dich hop le; chuoi LOGIN FAIL don dap; 1 lenh WITHDRAW lon).
+   Cap 2 (ssh analyst@172.20.0.10):
+     - grep 'ACT=WITHDRAW' /var/log/xpay/transactions.log        # dong rut tien trai phep (SRC, USER, TX#, AMT)
+     - grep 'RES=FAIL'     /var/log/xpay/transactions.log | tail # chuoi brute-force
+     - Chay thu tren SIEM:  sudo /var/ossec/bin/wazuh-logtest  roi dan 1 dong log xpayd ->
+         Phase 1 ra program_name: 'xpayd' NHUNG Phase 2 bao "No decoder matched" -> DUNG diem mu.
+   Cap 3: LOG_PROGRAM=xpayd ; ATTACKER_IP=172.20.0.5 ; VICTIM_USER=cfo_<so o log> ;
+          FRAUD_TX_ID=TX#<so o dong WITHDRAW> ; FRAUD_AMOUNT=85000000.
+
+--- PHA 2: BAT - viet DECODER + RULE (tren SIEM), test bang wazuh-logtest ---
+ (A) DECODER: sua /var/ossec/etc/decoders/local_decoder.xml, boc 6 truong theo thu tu
+     tx_id, srcip, dstuser, act, res, amount:
+        <decoder name="xpayd">
+          <program_name>^xpayd$</program_name>
+        </decoder>
+        <decoder name="xpayd-fields">
+          <parent>xpayd</parent>
+          <regex>^TX#(\w+)\|SRC=(\d+.\d+.\d+.\d+)\|USER=(\w+)\|ACT=(\w+)\|RES=(\w+)\|AMT=(\d+)</regex>
+          <order>tx_id, srcip, dstuser, act, res, amount</order>
+        </decoder>
+     (act = action, res = result/status - dat ten KHONG trung tu khoa tinh de rule khop bang <field>.)
+     Kiem chung: sudo /var/ossec/bin/wazuh-logtest -> dan dong WITHDRAW -> Phase 2 phai hien
+       name: 'xpayd' ; srcip: '172.20.0.5' ; dstuser: 'cfo_...' ; act: 'WITHDRAW' ;
+       res: 'OK' ; amount: '85000000'.  (Neu van "No decoder matched" -> xem lai \w / dau \| .)
+
+ (B) RULE: sua /var/ossec/etc/rules/local_rules.xml, viet cay rule dung truong vua decode:
+        <group name="local,xpay_security,">
+          <rule id="100500" level="3">
+            <decoded_as>xpayd</decoded_as>
+            <description>XPAY transaction event</description>
+          </rule>
+          <rule id="100501" level="5">
+            <if_sid>100500</if_sid>
+            <field name="act">^LOGIN$</field>
+            <field name="res">^FAIL$</field>
+            <description>XPAY: Failed login for $(dstuser) from $(srcip)</description>
+            <mitre><id>T1110</id></mitre>
+          </rule>
+          <rule id="100502" level="10" frequency="5" timeframe="60">
+            <if_matched_sid>100501</if_matched_sid>
+            <same_source_ip />
+            <description>XPAY: Brute-force from $(srcip) targeting $(dstuser)</description>
+            <mitre><id>T1110</id></mitre>
+            <group>xpay_bruteforce,</group>
+          </rule>
+          <rule id="100503" level="12">
+            <if_sid>100500</if_sid>
+            <field name="act">^WITHDRAW$|^TRANSFER$</field>
+            <field name="res">^OK$</field>
+            <field name="amount">^\d\d\d\d\d\d\d\d</field>
+            <description>XPAY CRITICAL: High-value $(amount) by $(dstuser) from $(srcip)</description>
+            <mitre><id>T1078</id></mitre>
+            <group>xpay_fraud,</group>
+          </rule>
+        </group>
+     Nap: sudo systemctl restart wazuh-manager.
+
+ *** CHAM DIEM PHA 2 THE NAO (de ban nham dung muc tieu) ***
+   checkwork BOM MAU vao wazuh-logtest (doc thang file cua ban, KHONG can agent/restart) + doc file rule:
+     - decoder_ok          : dong WITHDRAW bi boc dung 5 truong srcip/dstuser/act/res/amount.
+     - high_value_detected : dong WITHDRAW (AMT=85000000) no canh bao level >= 12.
+     - no_false_positive   : giao dich hop le (150000, 6 chu so) + bien 9.999.999 (7 chu so) + 1 FAIL le te
+                             -> KHONG cai nao len level >= 10 (=> nguong tien PHAI la 8 chu so, dung ^\d\d\d\d\d\d\d\d).
+     - bruteforce_detected : (a) 1 dong LOGIN FAIL no rule co ban cua ban (level >= 5, chung to rule khop
+                             dung field act=LOGIN + res=FAIL) VA (b) file rule co du cau truc tuong quan:
+                             frequency + same_source_ip + if_matched_sid.
+   *** LUU Y QUAN TRONG: wazuh-logtest KHONG mo phong duoc rule TAN SUAT co <same_source_ip/> -> ban bom
+       6 dong FAIL vao logtest se CHI thay level 5 (rule con 100502 KHONG no trong logtest). DAY LA BINH THUONG,
+       KHONG phai loi rule. Rule tan suat chi no that tren MANAGER (xem alerts.log khi co su kien live). Vi vay
+       grader cham brute-force bang CAU TRUC rule (phan b) + rule co ban no (phan a), khong doi logtest no 100502. ***
+
+--- PHA 3: UNG PHO NHE (tren target) ---
+  1. Chan IP ke tan cong:   sudo iptables -A INPUT -s 172.20.0.5 -j DROP
+     (TUYET DOI khong chan 172.20.0.20 = SIEM -> se dut giam sat, truot SLA.)
+  2. Khoa tai khoan VIP bi chiem: them cfo_<so> vao danh sach khoa:
+       echo "cfo_<so>" | sudo tee -a /etc/xpay/locked_accounts
+  (Luong giao dich nhieu nen la DICH VU HE THONG hop le - KHONG dong toi.)
+
+6. NOP BAI
+--------------------------------------------------------------------------------
+  checkwork -> tu kiem tra ; stoplab -> nop bai. Cac muc cham:
+    - reported            : 5 cau findings.txt dung.
+    - decoder_ok          : decoder boc dung 6 truong.
+    - bruteforce_detected : rule tan suat (frequency + same_source_ip) no tren brute-force.
+    - high_value_detected : rule nguong so tien no tren lenh rut tien lon.
+    - no_false_positive   : giao dich hop le / FAIL le te KHONG bi bao nham muc cao.
+    - responded           : da chan IP ke tan cong (172.20.0.5).
+    - account_secured     : da khoa cfo_<so> trong /etc/xpay/locked_accounts.
+    - sla_ok              : ket noi toi SIEM (172.20.0.20) van song.

@@ -1,0 +1,7 @@
+SOC Lab - Viet Custom Decoder cho log ung dung la (Detection Engineering): Dieu tra -> Bat -> Tinh chinh -> Ung pho.
+Dich vu Cong thanh toan noi bo "xpayd" tren target ghi log DINH DANG RIENG vao /var/log/xpay/transactions.log.
+Wazuh KHONG co decoder hieu dinh dang nay -> pipeline Log->Decoder->Rule->Alert DUT ngay o buoc Decoder ->
+mot vu rut trom vi VIP (cfo_<ACID>, 85.000.000 VND) KHONG sinh canh bao nao (diem mu cua SOC).
+Nhiem vu 3 pha: (1) DIEU TRA log tho - dien 5 cau ~/findings.txt; (2) BAT - tu viet DECODER (local_decoder.xml)
+boc tach 6 truong + cay RULE phat hien brute-force (tan suat + same_source_ip) va rut tien gia tri lon,
+KHONG bao gia tren giao dich hop le; (3) UNG PHO - chan IP ke tan cong + khoa tai khoan VIP, giu SLA.

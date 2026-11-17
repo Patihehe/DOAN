@@ -1,0 +1,70 @@
+#!/bin/bash
+# Cham PHA 2 (decoder + rule). 2 dac diem cua wazuh-logtest 4.14.9 da kiem chung:
+#  - logtest IN RA STDERR -> phai gom 2>&1 va ghi FILE (khong bat qua pipe -> tranh segfault).
+#  - logtest KHONG mo phong duoc rule tan suat + <same_source_ip/> -> brute-force cham bang:
+#      (a) rule FAIL co ban no (logtest, level>=5) + (b) file rule co cau truc tuong quan.
+#   DECODER_OK          : withdraw decode dung 5 truong (srcip, dstuser, act, res, amount)
+#   HIGH_VALUE_DETECTED : withdraw no level >= 12
+#   BRUTEFORCE_DETECTED : rule FAIL co ban no (>=5) VA file rule co frequency + same_source_ip + if_matched_sid
+#   NO_FP_OK            : giao dich hop le (6-7 chu so) + FAIL le te KHONG no level >= 10
+trap "echo Timed out; exit" SIGTERM
+echo "PRESTOP_MARKER_SIEM"
+
+LT="/var/ossec/bin/wazuh-logtest"
+RULES="/var/ossec/etc/rules/local_rules.xml"
+
+# logtest in ra STDERR -> gom 2>&1; ghi FILE (khong pipe) -> tranh segfault; retry cho ket noi analysisd.
+run(){
+  local tmp n=0; tmp=$(mktemp)
+  while [ "$n" -lt 4 ]; do
+    printf '%s\n' "$@" | sudo -n "$LT" >"$tmp" 2>&1
+    grep -q "Phase 1" "$tmp" && { cat "$tmp"; rm -f "$tmp"; return 0; }
+    n=$((n+1)); sleep 2
+  done
+  cat "$tmp"; rm -f "$tmp"
+}
+maxlvl(){ grep -oE "level: '[0-9]+'" | grep -oE '[0-9]+' | sort -n | tail -1; }
+
+# Warm-up: cho analysisd san sang (tranh loi/segfault ngay sau restart manager).
+for _ in 1 2 3 4 5 6 7 8; do printf 'warmup\n' | sudo -n "$LT" >/dev/null 2>&1 && break; sleep 2; done
+
+HDR="Nov 15 14:30:22 target xpayd[2205]:"
+WITHDRAW="$HDR TX#88392|SRC=172.20.0.5|USER=cfo_4821|ACT=WITHDRAW|RES=OK|AMT=85000000|NOTE=ext_wallet_drain"
+
+# === DECODER + HIGH-VALUE: bom 1 dong rut tien lon ===
+WOUT=$(run "$WITHDRAW")
+if printf '%s' "$WOUT" | grep -qE "srcip: '172\.20\.0\.5'" \
+   && printf '%s' "$WOUT" | grep -qE "dstuser: '[^']*cfo" \
+   && printf '%s' "$WOUT" | grep -qE "act: 'WITHDRAW'" \
+   && printf '%s' "$WOUT" | grep -qE "res: 'OK'" \
+   && printf '%s' "$WOUT" | grep -qE "amount: '85000000'"; then
+  echo "DECODER_OK"
+fi
+L=$(printf '%s' "$WOUT" | maxlvl); [ -n "$L" ] && [ "$L" -ge 12 ] && echo "HIGH_VALUE_DETECTED"
+sleep 1
+
+# === NO FALSE POSITIVE: giao dich hop le 6 chu so + bien 7 chu so (9.999.999) + 1 FAIL le te -> KHONG level >= 10 ===
+FP=()
+FP+=("Nov 15 10:00:00 target xpayd[2104]: TX#1002|SRC=172.20.0.30|USER=nv_hoa|ACT=TRANSFER|RES=OK|AMT=150000|NOTE=lunch_bill")
+FP+=("Nov 15 10:00:05 target xpayd[2104]: TX#1004|SRC=172.20.0.33|USER=acct_bot|ACT=TRANSFER|RES=OK|AMT=9999999|NOTE=payroll")
+FP+=("Nov 15 10:00:09 target xpayd[2104]: TX#1005|SRC=172.20.0.31|USER=nv_minh|ACT=LOGIN|RES=FAIL|AMT=0|NOTE=typo")
+FOUT=$(run "${FP[@]}")
+if printf '%s' "$FOUT" | grep -q "Phase 1"; then
+  L=$(printf '%s' "$FOUT" | maxlvl)
+  { [ -z "$L" ] || [ "$L" -lt 10 ]; } && echo "NO_FP_OK"
+fi
+sleep 1
+
+# === BRUTE-FORCE: (a) rule FAIL co ban no (logtest, dung field act/res) + (b) file rule co cau truc tuong quan ===
+# (logtest khong mo phong duoc frequency + same_source_ip, nen xac nhan cau truc rule truc tiep tu file.)
+FAIL1="Nov 15 14:30:11 target xpayd[2191]: TX#2042|SRC=172.20.0.5|USER=cfo_4821|ACT=LOGIN|RES=FAIL|AMT=0|NOTE=bad_pin"
+BOUT=$(run "$FAIL1"); BL=$(printf '%s' "$BOUT" | maxlvl)
+RF=$(sudo -n cat "$RULES" 2>/dev/null)
+if [ -n "$BL" ] && [ "$BL" -ge 5 ] \
+   && printf '%s' "$RF" | grep -q 'frequency=' \
+   && printf '%s' "$RF" | grep -qi 'same_source_ip' \
+   && printf '%s' "$RF" | grep -q 'if_matched_sid'; then
+  echo "BRUTEFORCE_DETECTED"
+fi
+
+exit 0

@@ -1,0 +1,36 @@
+#!/bin/bash
+# Chup trang thai target luc checkwork/stoplab -> prestop.stdout (cham diem).
+# Chi in co/OK, KHONG lo dap an (so cfo_<so>, TX#<so>) de tranh SV chep tu prestop.stdout.
+trap "echo Timed out; exit" SIGTERM
+echo "PRESTOP_MARKER"
+
+F=/home/analyst/findings.txt
+LOG=/var/log/xpay/transactions.log
+
+# --- UNG PHO 1: chan IP ke tan cong (.5) bang iptables (chan theo LUAT) ---
+sudo -n iptables -S 2>/dev/null | grep -qE '172\.20\.0\.5(/32)?.*-j (DROP|REJECT)' && echo "ATTACKER_BLOCKED"
+
+# --- SLA: ket noi toi SIEM (.20) con song (agent van day log, khong chan bua) ---
+SL=$(ss -tn 2>/dev/null | grep -c '172.20.0.20:')
+[ "${SL:-0}" -ge 1 ] && echo "SLA_OK"
+
+# --- UNG PHO 2: khoa tai khoan VIP bi chiem (cfo_<so> co trong /etc/xpay/locked_accounts) ---
+CFO=$(grep -oE 'cfo_[0-9]+' "$LOG" 2>/dev/null | head -1)
+ACID=$(echo "$CFO" | tr -cd '0-9')
+if [ -n "$CFO" ] && grep -qE "(^|[^0-9])${ACID}([^0-9]|$)" /etc/xpay/locked_accounts 2>/dev/null; then
+  echo "ACCOUNT_LOCKED"
+fi
+
+# --- DIEU TRA: doi chieu 5 cau findings.txt voi SU THAT trong log ---
+GTTX=$(grep 'ACT=WITHDRAW' "$LOG" 2>/dev/null | grep -oE 'TX#[0-9]+' | head -1 | tr -cd '0-9')
+val(){ sed -n "s/^$1=//p" "$F" 2>/dev/null | head -1 | tr -d ' \r'; }
+
+echo "$(val LOG_PROGRAM)" | grep -qiE '^xpayd$' && echo "REP_PROG_OK"
+[ "$(val ATTACKER_IP)" = "172.20.0.5" ] && echo "REP_ATTACKER_OK"
+[ -n "$ACID" ] && [ "$(val VICTIM_USER | tr -cd '0-9')" = "$ACID" ] && echo "REP_VICTIM_OK"
+[ -n "$GTTX" ] && [ "$(val FRAUD_TX_ID | tr -cd '0-9')" = "$GTTX" ] && echo "REP_TXID_OK"
+[ "$(val FRAUD_AMOUNT | tr -cd '0-9')" = "85000000" ] && echo "REP_AMOUNT_OK"
+
+echo "=== findings (bao cao cua analyst) ==="
+cat "$F" 2>/dev/null
+exit 0
