@@ -1,0 +1,16 @@
+#!/bin/bash
+# prestop defender (Bai 17): in so lieu do an (du doan, khao sat, nhat ky goi y / kiem-thu-luat).
+# Bao cao IR, hardening, phan tu: GV doc ban goc khi cham tay (o day chi in kich thuoc).
+trap "echo Timed out; exit" SIGTERM
+ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
+H=/home/ubuntu
+echo "DEFENDER17_MARKER"
+echo "START_EPOCH=$(cat $H/.bai17_start 2>/dev/null) NOW_EPOCH=$(date +%s)"
+echo "=== du-doan ==="; grep -E '^[A-Z_]+=' $H/du-doan.txt 2>/dev/null
+echo "=== khao-sat ==="; grep -E '^[A-Z_]+=' $H/khao-sat.txt 2>/dev/null
+echo "=== goi-y ==="; cat $H/.goi-y.log 2>/dev/null; echo "HINT_COUNT=$(cat $H/.goi-y.log 2>/dev/null | wc -l)"
+echo "=== kiem-thu-luat ==="; cat $H/.kiem-thu.log 2>/dev/null; echo "KT_COUNT=$(cat $H/.kiem-thu.log 2>/dev/null | wc -l)"
+for f in hardening.txt bao-cao-ir.md phan-tu.txt; do
+  echo "FILE $f LINES=$(grep -cvE '^\s*(#|$)' $H/$f 2>/dev/null)"
+done
+exit 0

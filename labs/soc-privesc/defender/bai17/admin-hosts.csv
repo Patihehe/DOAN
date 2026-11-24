@@ -1,0 +1,4 @@
+ip,hostname,status,ghi_chu
+172.20.0.41,adm-01,approved,May chu quan tri chinh (bastion)
+172.20.0.42,adm-02,approved,May chu quan tri du phong
+172.20.0.49,adm-old,retired,Ngung su dung tu thang 9 - cho thanh ly

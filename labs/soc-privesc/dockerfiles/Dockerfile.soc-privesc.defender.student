@@ -23,8 +23,18 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-ins
     && rm -rf /var/lib/apt/lists/* || true
 #
 # Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
-RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client \
+# Bai 17: python3 cho cong cu kiem-thu-luat / thu-dong / goi-y (thu vien chuan, khong can pip)
+RUN apt-get update || true; apt-get install -y --no-install-recommends openssh-client python3 \
     && rm -rf /var/lib/apt/lists/*
+#
+# Mat khau dashboard: moi thanh vien dung anh soc-wazuh rieng -> mat khau khac nhau.
+# Lay tu CHINH anh nen ma siem dung (cung tag voi FROM cua siem) -> luon khop khi rebuild lab.
+COPY --from=localhost:5000/soc-wazuh:latest /root/wazuh-admin-credentials.txt /tmp/wz-cred.txt
+RUN mkdir -p /etc/soc-tools \
+ && P=$(sed -n "s/^ *indexer_password: *'\(.*\)' *$/\1/p" /tmp/wz-cred.txt | head -1) \
+ && printf 'Wazuh dashboard: https://172.20.0.20\nTai khoan: admin\nMat khau : %s\n' "$P" > /etc/soc-tools/dashboard.txt \
+ && chmod 644 /etc/soc-tools/dashboard.txt && rm -f /tmp/wz-cred.txt \
+ && test -n "$P"
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /

@@ -21,8 +21,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-ins
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/* || true
 #
-# sshpass: SSH khong tuong tac bang mat khau emp<EMPNUM>
-RUN apt-get update && apt-get install -y --no-install-recommends sshpass openssh-client \
+# sshpass: SSH khong tuong tac bang mat khau emp<EMPNUM>; curl: cho siem seed xong truoc khi tan cong
+RUN apt-get update && apt-get install -y --no-install-recommends sshpass openssh-client curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* || true
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /

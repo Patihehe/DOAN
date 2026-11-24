@@ -1,0 +1,89 @@
+[1.2]
+NHAN VU VIEC (cap 2)
+- Tren dashboard, loc rule.level >= 10 cho agent target trong khoang thoi gian ca truc.
+- Ghi lai: may, gio, chu the (tai khoan/IP) cua canh bao do. Day la "cai duoi".
+- Truoc khi dieu tra, ghi du doan vao ~/du-doan.txt (khong cham dung sai).
+
+[1.3]
+NHAN VU VIEC (cap 3)
+- Canh bao duy nhat o muc cao la tai khoan UID 0 moi duoc tao (giai doan duy tri).
+- Tu do: lui ve TRUOC (ke tan cong vao bang gi, tu luc nao) va tien ve SAU (cua sau da duoc dung chua).
+
+[2.2]
+TIMELINE & GO BO (cap 2)
+- Truoc truy cap: loc auth.log / dashboard theo IP ke tan cong, BO dieu kien "thanh cong";
+  dem so user KHAC NHAU bi thu.
+- Trinh sat: sudo ghi ca lan nguoi dung LIET KE quyen, khong chi lan chay lenh.
+- Thu thap: FIM giam sat /tmp; tim file moi xuat hien GIUA leo quyen va cai persistence.
+  Nhieu file an xuat hien roi bien mat - file can tim thi van con va co noi dung nhay cam.
+- Quay lai: dang nhap thanh cong cua ROOT tu IP ke tan cong, phuong thuc KHONG phai mat khau.
+- Cach ly co dung cronjob khong? Thu gi van chay ma khong can mang?
+
+[2.3]
+TIMELINE & GO BO (cap 3)
+- TIME_SPRAY     = 'Failed password' DAU TIEN tu 172.20.0.5
+- TIME_ACCESS    = 'Accepted password for emp... from 172.20.0.5' dau tien
+- TIME_DISCOVERY = dong sudo cua tai khoan bi chiem co COMMAND=list
+- TIME_ESCALATION= dong sudo ... COMMAND=/usr/bin/awk DAU TIEN
+- TIME_CRED      = FIM 'added' trong /tmp: file an co noi dung giong /etc/shadow
+- TIME_PERSIST   = 'new user: name=svc-...'
+- TIME_REENTRY   = 'Accepted publickey for root from 172.20.0.5'
+- SO_TAI_KHOAN_BI_DO = so user khac nhau co 'Failed password'/'Accepted' tu .5 trong dot do
+  (TINH CA tai khoan bi chiem).
+- MITRE: do mat khau 1110, leo thang 1548, thu thap 1003, duy tri 1136, quay lai 1021.
+- Go bo: nhu lab goc (2 duong leo quyen, 4 lop persistence, khoa foothold) + XOA ban chep shadow.
+
+[3.2]
+BAN DO PHU & LUAT (cap 2)
+- Ban do phu: voi moi giai doan, loc rule.level >= 10 trong cua so thoi gian giai doan do
+  (chi luat NGUYEN TRANG - truoc khi ban nap luat cua minh).
+- L1: luat tan suat tren su kien "dang nhap that bai"; dem tai khoan KHAC NHAU tu CUNG 1 IP
+  trong cua so DAI (dot do keo dai nhieu phut).
+- L2: truong sudo.program (lab tach san) chua DUONG DAN chuong trinh, khong kem tham so.
+  Xem ~/tai-lieu/gtfobins-sudo.txt. Ngoai le phai theo CAP user-chuong trinh.
+- L3: dang nhap SSH thanh cong cua root; ngoai le = may chu quan tri CON HIEU LUC.
+- Dung 'thu-dong "<dong log>"' de xem truong nao duoc tach truoc khi viet luat.
+- Luat nen (if_sid) KHONG phai luc nao cung giong nhau: thu-dong mot dong sudo cua user CHUA tung
+  chay sudo va cua user DA chay roi (2 lan lien tiep voi --stdin) -> so sanh id luat no.
+  Tuong tu, xem ten tai khoan cua dong sshd nam o truong nao (srcuser hay dstuser).
+
+[3.3]
+BAN DO PHU & LUAT (cap 3)
+- Ban do phu: chi giai doan 5 co canh bao >= 10 -> COVER_5=1, con lai 0.
+- L1: <rule frequency="5" timeframe="600"> + <if_matched_sid>5760</if_matched_sid>
+       + <same_srcip/> + <different_user/>, level 10-12, MITRE T1110.003.
+       (Voi dong sshd, ten tai khoan nam o truong dstuser -> <different_srcuser/> dem SAI.)
+- L2: sudo thanh cong co HAI luat nen: 5402 va 5403 ("lan dau user chay sudo", KHONG la con cua 5402).
+       Can 2 luat level 12, moi luat 1 if_sid (5402 / 5403), cung
+       <list field="sudo.program" lookup="match_key">etc/lists/gtfo-shell</list>, MITRE T1548.003.
+       Moi cap da duyet = 1 luat con level 0, <if_sid> = ca 2 luat tren, khop DONG THOI
+       ten user tren dong log (<regex type="pcre2">(^|\s)deploy\s:\s</regex>) va
+       <field name="sudo.program">^/usr/bin/systemctl$</field>. (Wazuh KHONG co the <srcuser>.)
+       Dien gtfo-shell dang "/usr/bin/awk:".
+- L3: <if_sid>5715</if_sid> + <user>^root$</user> +
+       <list field="srcip" lookup="not_address_match_key">etc/lists/admin-hosts</list>,
+       level 12, MITRE T1021.004. admin-hosts chi chua IP status=approved, dang "172.20.0.41:".
+
+[4.2]
+HARDENING (cap 2)
+- Ngoai bit SUID, Linux con co che cap quyen THEO TUNG KHA NANG cho file thuc thi (capabilities).
+- Quy tac sudo nam o NHIEU file. Doi chieu tung dong voi ~/sudo-da-duyet.csv.
+- sshd co mot tuy chon rieng cho dang nhap cua root.
+
+[4.3]
+HARDENING (cap 3)
+- getcap -r / 2>/dev/null  -> tim file co cap_setuid; go bang setcap -r <file>.
+- Xem /etc/sudoers.d/*: xoa RIENG dong sudo cua deploy toi trinh soan thao/xem file;
+  GIU dong systemctl restart da duyet. Kiem: sudo -l -U deploy.
+- /etc/ssh/sshd_config: PermitRootLogin no; nap lai sshd; kiem: sudo sshd -T | grep -i permitroot.
+  KHONG dong phien SSH hien tai truoc khi kiem dang nhap analyst con duoc.
+
+[5.2]
+BAO CAO IR (cap 2)
+- Viet cho ban giam doc: tac dong (du lieu nao bi lay), viec da lam, viec can quyet.
+- File shadow bi lay -> coi MOI mat khau tren may da lo.
+[5.3]
+BAO CAO IR (cap 3)
+- Nguyen nhan goc la CHUOI: mat khau yeu (bi do) + sudo/SUID sai cau hinh + root dang nhap bang key.
+- Khuyen nghi: doi mat khau toan bo user tren may, ra soat sudo dinh ky, chinh sach mat khau/khoa,
+  dua 3 luat moi vao kiem thu truoc khi len san xuat.

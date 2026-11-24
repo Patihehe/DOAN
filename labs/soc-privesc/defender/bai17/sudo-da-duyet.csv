@@ -1,0 +1,5 @@
+user,chuong_trinh,tham_so,ly_do
+deploy,/usr/bin/systemctl,restart nginx,Trien khai ban moi cho web
+deploy,/usr/bin/systemctl,restart cron,Nap lai lich tac vu sau trien khai
+adminops,/usr/bin/apt,update,Cap nhat danh muc goi hang tuan
+adminops,/usr/bin/tail,-n 200 /var/log/syslog,Xem log khi truc

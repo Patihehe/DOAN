@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+# ============================================================================
+# goi-y <pha> <cap>   - in goi y cap 2/3 cua bai dang lam va GHI NHAT KY (~/.goi-y.log).
+# goi-y               - liet ke cac goi y co san.
+# Ha tang DUNG CHUNG (Bai 14-18). Goi y cap 1 nam trong read_first.txt.
+#
+# Noi dung luu o /usr/local/share/goi-y/<bai>.dat (zlib + base64 - chi de tranh "lo mat doc",
+# khong phai bao mat). <bai> lay tu "goiy" trong /etc/soc-tools/lab.json.
+# Tac gia: tao .dat tu file nguon bang:  goi-y --encode bai17.txt bai17.dat
+#   File nguon: cac khoi bat dau bang dong "[<pha>.<cap>]" (vd [2.3]), ASCII.
+# ============================================================================
+import base64, json, os, pwd, sys, time, zlib
+
+CONF = "/etc/soc-tools/lab.json"
+DATA_DIR = "/usr/local/share/goi-y"
+
+
+def home():
+    u = os.environ.get("SUDO_USER")
+    return pwd.getpwnam(u).pw_dir if u else os.path.expanduser("~")
+
+
+def parse(text):
+    blocks, key, buf = {}, None, []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith("[") and s.endswith("]") and "." in s:
+            if key:
+                blocks[key] = "\n".join(buf).strip()
+            key, buf = s[1:-1], []
+        elif key:
+            buf.append(ln)
+    if key:
+        blocks[key] = "\n".join(buf).strip()
+    return blocks
+
+
+def load():
+    bai = json.load(open(CONF)).get("goiy", "bai")
+    raw = open(os.path.join(DATA_DIR, bai + ".dat"), "rb").read()
+    return bai, parse(zlib.decompress(base64.b64decode(raw)).decode("utf-8"))
+
+
+def main():
+    a = sys.argv[1:]
+    if len(a) == 3 and a[0] == "--encode":
+        src = open(a[1], encoding="utf-8").read()
+        open(a[2], "wb").write(base64.b64encode(zlib.compress(src.encode("utf-8"), 9)))
+        print("Da ghi %s (%d khoi)" % (a[2], len(parse(src))))
+        return
+    try:
+        bai, blocks = load()
+    except Exception as e:
+        print("Khong doc duoc du lieu goi y: %s" % e)
+        sys.exit(1)
+    if len(a) != 2:
+        print("Dung: goi-y <pha> <cap>   (cap 2 = chi cho, cap 3 = gan nhu loi giai)")
+        print("Goi y cap 1 nam trong read_first.txt. Cac goi y co san:")
+        for k in sorted(blocks):
+            print("  goi-y %s %s" % tuple(k.split(".", 1)))
+        return
+    key = "%s.%s" % (a[0], a[1])
+    if a[1] == "1":
+        print("Goi y cap 1 nam trong read_first.txt.")
+        return
+    if key not in blocks:
+        print("Khong co goi y '%s'. Chay 'goi-y' de xem danh sach." % key)
+        sys.exit(1)
+    try:
+        with open(os.path.join(home(), ".goi-y.log"), "a") as f:
+            f.write("%s %s pha=%s cap=%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), bai, a[0], a[1]))
+    except OSError:
+        pass
+    print(blocks[key])
+
+
+if __name__ == "__main__":
+    main()

@@ -1,8 +1,12 @@
 #
-# Labtainer Dockerfile - siem (chay Wazuh: indexer + server + dashboard)
+# siem (Bai 17) - dung anh nen chung soc-wazuh (Wazuh cai san). TERMINALS 0 (an voi sinh vien).
+# Boot-hook Labtainers (fixlocal/parameter) BI BO QUA tren anh chung -> khoi tao bang SYSTEMD:
+#   seed-bai17.service : luat san xuat 100300, decoder sudo.program, 3 CDB list, user API, tap kiem tra an
+#   grade-bai17.path   : moi khi local_rules.xml / lists doi -> grade-bai17.service cham lai phan luat
+# LUU Y: KHONG chay apply-shared-siem.sh len lab nay nua (file nay da la ban dung anh chung).
 #
 ARG registry
-FROM $registry/labtainer.base2
+FROM localhost:5000/soc-wazuh:latest
 #
 ARG lab
 ARG labdir
@@ -15,32 +19,77 @@ LABEL version=$version
 ENV APT_SOURCE $apt_source
 RUN /usr/bin/apt-source.sh
 #
-# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+RUN (command -v python3 >/dev/null 2>&1) || (apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*) || true
+#
+# prestop (user ubuntu) duoc: doc marker seed, chay grader, xem agent
+RUN printf '%s\n' \
+  'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /root/.bai17/seeded, /usr/bin/cat /root/.bai17/seeded, /usr/bin/python3 /home/ubuntu/bai17/grade17.py *, /var/ossec/bin/agent_control' \
+  > /etc/sudoers.d/labtainer-bai17 && chmod 440 /etc/sudoers.d/labtainer-bai17
+#
+# === systemd: seed (1 lan) + cham luat khi luat doi ===
+RUN printf '%s\n' \
+  '[Unit]' \
+  'Description=Bai 17 - khoi tao ruleset, user API, tap kiem tra an' \
+  'After=wazuh-manager.service network-online.target' \
+  'Wants=wazuh-manager.service' \
+  '[Service]' \
+  'Type=oneshot' \
+  'RemainAfterExit=yes' \
+  'TimeoutStartSec=900' \
+  'ExecStart=/usr/bin/python3 /home/ubuntu/bai17/seed17.py' \
+  'ExecStartPost=/usr/bin/python3 /home/ubuntu/bai17/grade17.py rules 5' \
+  '[Install]' \
+  'WantedBy=multi-user.target' \
+  > /etc/systemd/system/seed-bai17.service \
+ && printf '%s\n' \
+  '[Unit]' \
+  'Description=Bai 17 - cham lai luat cua sinh vien khi luat/list doi' \
+  '[Path]' \
+  'PathChanged=/var/ossec/etc/rules/local_rules.xml' \
+  'PathChanged=/var/ossec/etc/lists' \
+  'Unit=grade-bai17.service' \
+  '[Install]' \
+  'WantedBy=multi-user.target' \
+  > /etc/systemd/system/grade-bai17.path \
+ && printf '%s\n' \
+  '[Unit]' \
+  'Description=Bai 17 - phat lai tap kiem tra an' \
+  'After=seed-bai17.service' \
+  '[Service]' \
+  'Type=oneshot' \
+  'TimeoutStartSec=600' \
+  'ExecStart=/usr/bin/python3 /home/ubuntu/bai17/grade17.py rules 20' \
+  > /etc/systemd/system/grade-bai17.service \
+ && mkdir -p /etc/systemd/system/multi-user.target.wants \
+ && ln -sf /etc/systemd/system/seed-bai17.service /etc/systemd/system/multi-user.target.wants/seed-bai17.service \
+ && ln -sf /etc/systemd/system/grade-bai17.path /etc/systemd/system/multi-user.target.wants/grade-bai17.path \
+ && mkdir -p /etc/systemd/system/wazuh-manager.service.d \
+ && printf '[Service]\nTimeoutStartSec=600\n' > /etc/systemd/system/wazuh-manager.service.d/bai17-timeout.conf \
+ && mkdir -p /etc/systemd/system/wazuh-indexer.service.d /etc/systemd/system/wazuh-dashboard.service.d \
+ && printf '[Service]\nTimeoutStartSec=900\n' > /etc/systemd/system/wazuh-indexer.service.d/bai17-timeout.conf \
+ && printf '[Unit]\nAfter=wazuh-indexer.service\n[Service]\nRestart=on-failure\nRestartSec=30\n' > /etc/systemd/system/wazuh-dashboard.service.d/bai17-order.conf
+#
+# === Dong bo mui gio voi VM (ICT = UTC+7) ===
 ENV TZ=Asia/Ho_Chi_Minh
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/* || true
 #
-# Cong cu cho bake + cai offline (setcap = libcap2-bin)
-RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg tar libcap2-bin openssl \
-    && rm -rf /var/lib/apt/lists/*
-#
-# Cho prestop doc alerts + agent_control khong can mat khau (de cham diem)
-RUN echo 'ubuntu ALL=(ALL) NOPASSWD: /bin/cat /var/ossec/logs/alerts/alerts.log, /usr/bin/cat /var/ossec/logs/alerts/alerts.log, /var/ossec/bin/agent_control' > /etc/sudoers.d/labtainer-wazuh \
-    && chmod 440 /etc/sudoers.d/labtainer-wazuh
-#
-# --- PRE-BAKE: tai goi Wazuh + tao chung chi luc BUILD (de first-boot cai OFFLINE) ---
-RUN mkdir -p /root/wz && cd /root/wz \
- && curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh \
- && bash wazuh-install.sh -dw deb -da amd64 \
- && curl -sO https://packages.wazuh.com/4.14/config.yml \
- && sed -i 's/<[a-z0-9-]*-ip>/127.0.0.1/g' config.yml \
- && bash wazuh-install.sh -g
+# === Entrypoint: khoi phuc quyen cac user Wazuh truoc systemd; don trang thai agent cu ===
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'for u in wazuh-indexer wazuh-dashboard; do' \
+  '  id "$u" >/dev/null 2>&1 || continue' \
+  '  chown -R "$u:$u" /usr/share/$u /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+  'done' \
+  'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+  'exec /sbin/init --log-target=journal 3>&1' \
+  > /entrypoint.sh && chmod +x /entrypoint.sh
 #
 ADD $labdir/$imagedir/sys_tar/sys.tar /
 ADD $labdir/sys_$lab.tar.gz /
 #
-RUN useradd -ms /bin/bash $user_name
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
 RUN echo "$user_name:$password" | chpasswd
 RUN adduser $user_name sudo
 #
@@ -52,4 +101,6 @@ RUN rm -f $HOME/home.tar
 ADD $labdir/$lab.tar.gz $HOME
 #
 USER root
-CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
+RUN mkdir -p /home/$user_name/.local && echo "soc-privesc" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
+CMD ["/entrypoint.sh"]

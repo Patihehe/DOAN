@@ -1,0 +1,19 @@
+TAI LIEU THAM KHAO OFFLINE - Chuong trinh co the "thoat ra shell" khi duoc chay bang sudo
+(tom tat theo danh muc cong khai GTFOBins: https://gtfobins.github.io - lab khong co Internet)
+-----------------------------------------------------------------------------------------------
+Nguyen tac: neu mot chuong trinh co the chay lenh khac, mo trinh soan thao, mo pager, hoac
+thuc thi ma -> chay no bang sudo = co shell root. Danh sach duoi CHUA DAY DU.
+
+Trinh thong dich / ngon ngu : python, python3, perl, ruby, lua, php, node, tclsh, irb, expect
+Cong cu xu ly van ban      : awk, gawk, mawk, sed (voi lenh e), ed
+Tim kiem / he thong file   : find, tar, zip, rsync, cp (ghi de file he thong)
+Trinh soan thao            : vi, vim, vim.tiny, view, nano, pico, emacs
+Pager / xem file           : less, more, man, journalctl, systemctl (qua pager)
+Shell / bien moi truong    : sh, bash, dash, env, script, nohup, xargs, time, timeout
+Mang / ket noi             : ssh (ProxyCommand), ftp, socat, nmap (script), tcpdump (-z)
+Quan ly goi / dev          : apt, apt-get (changelog qua pager), git (pager/hook), gdb, make
+-----------------------------------------------------------------------------------------------
+Luu y van hanh: mot so chuong trinh trong danh sach VAN duoc cap sudo vi ly do cong viec
+(vd systemctl cho deploy). Do la RUI RO DUOC CHAP NHAN CO GHI NHAN (xem sudo-da-duyet.csv),
+khong phai "an toan". Luat phat hien phai ngoai le DUNG CAP user-lenh da duyet, khong ngoai le
+ca user.

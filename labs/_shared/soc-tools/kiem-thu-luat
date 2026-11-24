@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+# ============================================================================
+# kiem-thu-luat - kiem cu phap, nap luat + CDB list cua nguoi hoc len Wazuh, khoi dong lai
+# manager, roi phat lai TAP PHAT TRIEN va in TP/FP/FN, precision, recall tung ho.
+# Ha tang DUNG CHUNG (Bai 16, 17, 18). Cau hinh rieng tung bai: /etc/soc-tools/lab.json
+#   {
+#     "rules_file": "luat/local_rules.xml",        (tuong doi voi HOME nguoi hoc)
+#     "lists_dir":  "luat/lists",
+#     "lists":      ["gtfo-shell", "sudo-approved", "admin-hosts"],
+#     "dev_set":    "dev/dev.jsonl",
+#     "ranges":     "l1=100270-100279,l2=100280-100289,l3=100290-100299"
+#   }
+# An toan: luat loi -> KHOI PHUC ban dang chay truoc do, manager khong bi sap.
+# ============================================================================
+import hashlib, json, os, pwd, sys, time
+import xml.etree.ElementTree as ET
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+for p in (HERE, "/usr/local/lib/soc-tools"):
+    if os.path.isfile(os.path.join(p, "wzapi.py")):
+        sys.path.insert(0, p)
+        break
+from wzapi import Wazuh, WazuhError
+import replay
+
+CONF = "/etc/soc-tools/lab.json"
+
+
+def user_home():
+    u = os.environ.get("SUDO_USER")
+    if u:
+        return pwd.getpwnam(u).pw_dir
+    return os.path.expanduser("~")
+
+
+def die(msg, code=1):
+    print("LOI: " + msg)
+    sys.exit(code)
+
+
+BAD_TAGS = {
+    "srcuser": "khong co the nay; so ten tren dong log bang <regex type=\"pcre2\">",
+    "dstuser": "dung <user>",
+    "different_dstuser": "dung <different_user />",
+    "same_dstuser": "khong co the nay tren Wazuh 4.14",
+}
+STATIC_FIELDS = {
+    "srcuser": "So ten tren dong log bang <regex type=\"pcre2\">.",
+    "dstuser": "Dung <user>.",
+    "srcip": "Dung <srcip> hoac <list field=\"srcip\" ...>.",
+    "dstip": "Dung <dstip>.",
+    "user": "Dung <user>.",
+}
+
+
+def check_rules_xml(text, ranges):
+    """Kiem cu phap XML + moi rule id phai nam trong dai duoc giao. Tra ve danh sach loi."""
+    errs = []
+    try:
+        root = ET.fromstring("<root>" + text + "</root>")
+    except ET.ParseError as e:
+        return ["Cu phap XML sai: %s" % e]
+    allowed = list(ranges.values())
+    if not list(root.iter("rule")):
+        return ["Chua co luat nao trong file (Wazuh tu choi <group> rong)"]
+    # Loi da gap tren Wazuh 4.14 that (API bao chung chung "1113 XML syntax error"):
+    for el in root.iter():
+        if el.tag in BAD_TAGS:
+            errs.append("The <%s> KHONG hop le trong luat Wazuh: %s" % (el.tag, BAD_TAGS[el.tag]))
+        if el.tag == "field" and el.get("name") in STATIC_FIELDS:
+            errs.append('<field name="%s"> KHONG dung duoc: %s la truong TINH. %s'
+                        % (el.get("name"), el.get("name"), STATIC_FIELDS[el.get("name")]))
+    for rule in root.iter("rule"):
+        rid = rule.get("id", "")
+        if not rid.isdigit():
+            errs.append("Luat thieu id hoac id khong phai so: %r" % rid)
+            continue
+        n = int(rid)
+        if not any(lo <= n <= hi for lo, hi in allowed):
+            errs.append("Luat id=%d nam NGOAI dai ID duoc giao" % n)
+        lvl = rule.get("level", "")
+        if lvl.isdigit() and int(lvl) >= 10 and rule.find("mitre") is None:
+            errs.append("Luat id=%d level %s thieu <mitre>" % (n, lvl))
+    return errs
+
+
+def main():
+    if not os.path.isfile(CONF):
+        die("khong thay %s (lab chua cai cong cu?)" % CONF)
+    cfg = json.load(open(CONF))
+    home = user_home()
+    rules_path = os.path.join(home, cfg["rules_file"])
+    lists_dir = os.path.join(home, cfg["lists_dir"])
+    dev_set = os.path.join(home, cfg["dev_set"])
+    ranges = replay.parse_ranges(cfg["ranges"])
+
+    print("== 1) Kiem tra cuc bo: %s" % rules_path)
+    if not os.path.isfile(rules_path):
+        die("khong thay file luat %s" % rules_path)
+    text = open(rules_path, encoding="utf-8").read()
+    errs = check_rules_xml(text, ranges)
+    hard = [e for e in errs if "thieu <mitre>" not in e]
+    for e in errs:
+        print("   - " + e)
+    if hard:
+        die("sua cac loi tren roi chay lai (CHUA nap gi len Wazuh).")
+
+    # Quy uoc phat lai: luat tan suat phai co timeframe >= window_s cua kich ban trong ho do
+    # (bo phat lai gui ca cua so gan nhu cung luc nen tap kiem tra KHONG do duoc dieu nay).
+    try:
+        wins = {}
+        for sc in replay.load_set(dev_set):
+            wins[sc["family"]] = max(wins.get(sc["family"], 0), int(sc.get("window_s", 0)))
+        root = ET.fromstring("<root>" + text + "</root>")
+        for rule in root.iter("rule"):
+            rid, tf = rule.get("id", "0"), rule.get("timeframe")
+            if not (rid.isdigit() and rule.get("frequency") and tf and tf.isdigit()):
+                continue
+            for fam, (lo, hi) in ranges.items():
+                if lo <= int(rid) <= hi and int(tf) < wins.get(fam, 0):
+                    print("   - CANH BAO: luat %s (ho %s) timeframe=%s < cua so kich ban %ss -> luat se bo lo "
+                          "hanh vi keo dai trong thuc te (va bi tru o cham diem)." % (rid, fam, tf, wins[fam]))
+    except Exception:  # noqa: BLE001
+        pass
+
+    lists = {}
+    for name in cfg.get("lists", []):
+        p = os.path.join(lists_dir, name)
+        lists[name] = open(p, encoding="utf-8").read() if os.path.isfile(p) else ""
+        for i, ln in enumerate(lists[name].splitlines(), 1):
+            if ln.strip() and ":" not in ln:
+                die("CDB list %s dong %d sai dinh dang (can 'khoa:' hoac 'khoa:gia_tri'): %r" % (name, i, ln))
+
+    api = Wazuh()
+    try:
+        api.login()
+    except WazuhError as e:
+        die(str(e) + "\n   (Wazuh co the dang khoi dong - doi 1-2 phut roi chay lai)")
+
+    print("== 2) Sao luu luat dang chay")
+    try:
+        backup_rules = api.get_rule_file("local_rules.xml")
+    except WazuhError:
+        backup_rules = None
+
+    print("== 3) Nap luat + %d CDB list" % len(lists))
+    try:
+        api.put_rule_file("local_rules.xml", text)
+        for name, content in lists.items():
+            api.put_list_file(name, content if content.strip() else "lab-placeholder:\n")
+    except WazuhError as e:
+        if backup_rules is not None:
+            try:
+                api.put_rule_file("local_rules.xml", backup_rules)
+            except WazuhError:
+                pass
+        die("Wazuh tu choi file: %s" % e)
+    # doc lai de chac file tren siem DUNG la file vua gui
+    try:
+        now = api.get_rule_file("local_rules.xml")
+    except WazuhError:
+        now = None
+    if now is not None and now.strip() != text.strip():
+        die("File luat tren siem KHAC file vua gui (co the API khong ghi duoc). Chay lai; neu van loi bao giang vien.")
+
+    try:
+        ok, msg = api.validate()
+    except WazuhError as e:
+        # khong kiem duoc -> KHONG de luat chua kiem tren dia (lan restart sau se nap no)
+        if backup_rules is not None:
+            try:
+                api.put_rule_file("local_rules.xml", backup_rules)
+            except WazuhError:
+                pass
+        die("Wazuh khong tra loi buoc kiem tra cau hinh (may dang qua tai?): %s\n"
+            "   -> Da khoi phuc luat truoc do. Doi 1-2 phut roi chay lai." % str(e)[:200])
+    if not ok:
+        print("   Cau hinh KHONG hop le: %s" % msg)
+        if backup_rules is not None:
+            api.put_rule_file("local_rules.xml", backup_rules)
+            print("   -> Da KHOI PHUC luat truoc do. Manager khong bi khoi dong lai.")
+        sys.exit(1)
+
+    print("== 4) Khoi dong lai Wazuh manager (~1-2 phut)")
+    if not api.restart():
+        die("manager chua len lai sau 4 phut - chay lai lenh nay sau 1 phut.")
+
+    print("== 5) Phat lai tap phat trien %s" % dev_set)
+    res = replay.run(replay.ApiEngine(api), replay.load_set(dev_set), ranges)
+    replay.print_dev(res)
+
+    sha = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    summ = " ".join("%s:P%.2f/R%.2f" % (f, r["precision"], r["recall"]) for f, r in res.items())
+    try:
+        with open(os.path.join(home, ".kiem-thu.log"), "a") as f:
+            f.write("%s sha=%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), sha, summ))
+    except OSError:
+        pass
+    print("\nLuat dang nap tren Wazuh (sha %s) chinh la bai nop. Tap kiem tra AN khac tap nay." % sha)
+
+
+if __name__ == "__main__":
+    main()

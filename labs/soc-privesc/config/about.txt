@@ -1,4 +1,5 @@
-SOC Lab - Dieu tra & Ung pho su co Leo thang dac quyen (Incident Response).
-May target da bi xam nhap: mot tai khoan thuong bi chiem, ke tan cong leo len root
-qua loi cau hinh va cai BACKDOOR de quay lai. Nhiem vu: dung lai chuoi tan cong (kill
-chain) qua SIEM/log, go sach backdoor, bit cac duong leo quyen va chan ke tan cong quay lai.
+SOC Lab - Bai 17: Dieu tra su co da giai doan & bao cao IR (Incident Response).
+May chu SSH target bi chiem quyen root qua chuoi 7 giai doan (do mat khau rai cham -> truy cap
+-> trinh sat -> leo quyen -> chep /etc/shadow -> cai persistence -> quay lai bang SSH key).
+Wazuh chi thay 1 canh bao. Nhiem vu: dung timeline toan canh, cach ly, go sach, lap ban do
+phu phat hien, viet 3 luat lap lo hong, hardening chu dong va viet bao cao IR.

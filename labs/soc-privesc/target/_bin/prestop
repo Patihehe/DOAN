@@ -15,7 +15,8 @@ TBD=$(sudo -n grep '^BACKDOOR=' /root/.soc_truth 2>/dev/null | cut -d= -f2)
 
 # ================= HIEN TRANG MAY (cham eradication/containment) =================
 # --- Leo quyen 1: /usr/bin/find con SUID? ---
-case "$(stat -c '%a' /usr/bin/find 2>/dev/null)" in 4*|6*|7*|2*|3*) echo "SUID_VULN_PRESENT";; esac
+# (sua loi: stat %a cua file thuong la 3 chu so, vd 755 -> mau 7* bat nham; dung test -u/-g)
+{ [ -u /usr/bin/find ] || [ -g /usr/bin/find ]; } && echo "SUID_VULN_PRESENT"
 # --- Leo quyen 2: con sudo NOPASSWD cho tai khoan bi chiem? ---
 sudo -n grep -rhiE 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -qi "$TACCT" && echo "SUDO_VULN_PRESENT"
 # --- Persistence lop 1: con tai khoan UID 0 la (backdoor)? ---
@@ -23,7 +24,7 @@ awk -F: '($3==0 && $1!="root"){f=1} END{if(f) print "UID0USER_PRESENT"}' /etc/pa
 # --- Persistence lop 2: SSH key la trong /root/.ssh/authorized_keys? ---
 sudo -n grep -q 'backdoor@attacker' /root/.ssh/authorized_keys 2>/dev/null && echo "SSHKEY_PRESENT"
 # --- Persistence lop 3: SUID backdoor an? ---
-case "$(stat -c '%a' /usr/local/bin/.dbus-cache 2>/dev/null)" in 4*|6*|7*|2*|3*) echo "SUIDBD_PRESENT";; esac
+{ [ -u /usr/local/bin/.dbus-cache ] || [ -g /usr/local/bin/.dbus-cache ]; } && echo "SUIDBD_PRESENT"
 # --- Persistence lop 4: cronjob doc? ---
 [ -f /etc/cron.d/sysbackup ] && echo "CRONBD_PRESENT"
 # --- Foothold: tai khoan bi chiem con dang nhap duoc? (shadow chua bi khoa) ---
@@ -64,5 +65,68 @@ if close "$A" "$GT_A" && close "$E" "$GT_E" && close "$P" "$GT_P"; then
   am=$(to_min "$A"); em=$(to_min "$E"); pm=$(to_min "$P")
   [ "$am" -le "$em" ] && [ "$em" -le "$pm" ] && echo "TIMELINE_OK"
 fi
+
+# ######################################################################################
+# ===================== BAI 17 - KHOI CHAM MO RONG (noi them, khong sua khoi goc) =====================
+# Van chi in CO/OK - khong in ten, gio, ten file.
+# ######################################################################################
+gt(){ sudo -n grep "^$1=" /root/.soc_truth 2>/dev/null | head -1 | cut -d= -f2-; }
+fv(){ grep "^$1=" "$F" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r'; }
+N_SPRAY=$(gt N_SPRAY); CRED_FILE=$(gt CRED_FILE); CRED_TIME=$(gt CRED_TIME)
+
+# ---- 4 moc moi (gio that) ----
+GT_S=$(gt_time "Failed password for .* from 172\.20\.0\.5 ")
+GT_D=$(gt_time "sudo: *$TACCT : .*COMMAND=list")
+GT_C="$CRED_TIME"
+GT_R=$(gt_time "Accepted publickey for root from 172\.20\.0\.5 ")
+S=$(fv TIME_SPRAY); D=$(fv TIME_DISCOVERY); C=$(fv TIME_CRED); RE=$(fv TIME_REENTRY)
+n=0
+close "$A" "$GT_A" && n=$((n+1))
+close "$E" "$GT_E" && n=$((n+1))
+close "$P" "$GT_P" && n=$((n+1))
+close "$S" "$GT_S" && { n=$((n+1)); echo "TIME_SPRAY_OK"; }
+close "$D" "$GT_D" && { n=$((n+1)); echo "TIME_DISC_OK"; }
+close "$C" "$GT_C" && { n=$((n+1)); echo "TIME_CRED_OK"; }
+close "$RE" "$GT_R" && { n=$((n+1)); echo "TIME_REENTRY_OK"; }
+# Thu tu: cac moc DA DIEN phai khong giam theo dung trinh tu tan cong
+ord_ok=1; prev=-1
+for v in "$S" "$A" "$D" "$E" "$C" "$P" "$RE"; do
+  m=$(to_min "$v") || continue
+  [ "$m" -lt "$prev" ] && ord_ok=0
+  prev=$m
+done
+[ "$n" -ge 6 ] && [ "$ord_ok" -eq 1 ] && echo "TIMELINE_FULL_OK"
+
+# ---- Pham vi dot do mat khau ----
+[ -n "$N_SPRAY" ] && [ "$(fv SO_TAI_KHOAN_BI_DO)" = "$N_SPRAY" ] && echo "SPRAY_N_OK"
+
+# ---- MITRE (chap nhan T1110 / 1110 / T1110.003) ----
+mnorm(){ echo "$1" | tr 'a-z' 'A-Z' | sed 's/^T//; s/\..*//' | tr -dc '0-9'; }
+mc=0
+[ "$(mnorm "$(fv MITRE_SPRAY)")" = "1110" ]      && mc=$((mc+1))
+[ "$(mnorm "$(fv MITRE_ESCALATION)")" = "1548" ] && mc=$((mc+1))
+[ "$(mnorm "$(fv MITRE_CRED)")" = "1003" ]       && mc=$((mc+1))
+[ "$(mnorm "$(fv MITRE_PERSIST)")" = "1136" ]    && mc=$((mc+1))
+[ "$(mnorm "$(fv MITRE_REENTRY)")" = "1021" ]    && mc=$((mc+1))
+[ "$mc" -ge 4 ] && echo "MITRE_OK"
+
+# ---- Ban do phu (y do thiet ke; siem xac nhan bang COVER_DESIGN_OK) ----
+cc=0; i=0
+for want in 0 0 0 0 0 1 0; do
+  [ "$(fv COVER_$i)" = "$want" ] && cc=$((cc+1)); i=$((i+1))
+done
+[ "$cc" -ge 6 ] && echo "COVER_OK"
+
+# ---- Hardening ----
+getcap -r /usr/local/bin /usr/local/sbin /usr/bin /usr/sbin /bin /sbin /opt 2>/dev/null | grep -q 'cap_setuid' \
+  || echo "HARDEN_CAP_OK"
+DEPL=$(sudo -n grep -rhv '^[[:space:]]*#' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -E '^[[:space:]]*deploy[[:space:]]')
+echo "$DEPL" | grep -qE '(/|[[:space:]])(vim|vi|vim\.tiny|nano|less|more|view)([[:space:],]|$)' || echo "HARDEN_SUDO_OK"
+echo "$DEPL" | grep -q 'restart nginx' && echo "$DEPL" | grep -q 'restart cron' && echo "DEPLOY_SUDO_INTACT"
+sudo -n /usr/sbin/sshd -T 2>/dev/null | grep -qi '^permitrootlogin no' && echo "HARDEN_SSH_OK"
+
+# ---- Tao tac ke tan cong de lai (ban chep /etc/shadow) ----
+[ -n "$CRED_FILE" ] && [ -e "$CRED_FILE" ] && echo "SHADOW_COPY_PRESENT"
+[ -n "$CRED_FILE" ] && echo "CRED_GT_PRESENT"
 
 exit 0

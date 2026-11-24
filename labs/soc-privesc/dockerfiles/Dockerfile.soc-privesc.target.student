@@ -23,13 +23,19 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-ins
     && rm -rf /var/lib/apt/lists/* || true
 #
 # Cho prestop doc sudoers (440 root) khong mat khau
-RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/grep, /bin/grep, /usr/bin/cat, /bin/cat, /sbin/iptables, /usr/sbin/iptables' > /etc/sudoers.d/labtainer-pe \
+RUN echo '%sudo ALL=(ALL) NOPASSWD: /usr/bin/grep, /bin/grep, /usr/bin/cat, /bin/cat, /sbin/iptables, /usr/sbin/iptables, /usr/sbin/sshd -T' > /etc/sudoers.d/labtainer-pe \
     && chmod 440 /etc/sudoers.d/labtainer-pe
 #
 # Dam bao co sudo, findutils (find), mawk (awk), iptables (containment A3), cron (persistence B4)
 RUN apt-get update && apt-get install -y --no-install-recommends sudo findutils mawk iptables cron \
     && rm -rf /var/lib/apt/lists/* || true
 RUN systemctl enable cron 2>/dev/null || true
+#
+# Bai 17: setcap/getcap (H1), trinh thong dich (H1: python3/perl), trinh soan thao/xem file (H2),
+# openssl/coreutils (mat khau ngau nhien cho tai khoan moi)
+RUN apt-get update && apt-get install -y --no-install-recommends libcap2-bin perl python3 vim-tiny nano less \
+    && rm -rf /var/lib/apt/lists/* || true
+RUN [ -e /usr/bin/vim ] || ln -s /usr/bin/vim.tiny /usr/bin/vim
 #
 # --- Wazuh agent (bake, tro ve manager 172.20.0.20) ---
 RUN apt-get update && apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg && rm -rf /var/lib/apt/lists/*

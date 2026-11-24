@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+# ============================================================================
+# thu-dong "<dong log>" [--location /var/log/auth.log]
+# Chay MOT dong log qua Wazuh logtest voi bo luat DANG NAP. In: decoder, cac truong da tach,
+# luat no (id, level, mo ta). Nhieu dong lien tiep trong cung phien: dung --stdin (moi dong 1 su kien).
+# Ha tang DUNG CHUNG (Bai 16, 17, 18).
+# ============================================================================
+import argparse, json, os, sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+for p in (HERE, "/usr/local/lib/soc-tools"):
+    if os.path.isfile(os.path.join(p, "wzapi.py")):
+        sys.path.insert(0, p)
+        break
+from wzapi import Wazuh, WazuhError
+
+
+def show(out):
+    dec = out.get("decoder") or {}
+    print("  decoder : %s%s" % (dec.get("parent", "") + " > " if dec.get("parent") else "", dec.get("name", "(khong co)")))
+    data = dict(out.get("data") or {})
+    for k in ("srcip", "dstip", "srcuser", "dstuser", "srcport", "dstport", "url", "id", "status"):
+        if k in out:
+            data[k] = out[k]
+    if data:
+        print("  truong  : " + json.dumps(data, ensure_ascii=False))
+    rule = out.get("rule") or {}
+    if rule:
+        mitre = ",".join((rule.get("mitre") or {}).get("id", []) or [])
+        print("  luat    : id=%s level=%s %s%s" % (rule.get("id"), rule.get("level"), rule.get("description", ""),
+                                             ("  [MITRE " + mitre + "]") if mitre else ""))
+    else:
+        print("  luat    : (khong luat nao no)")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("line", nargs="?", help="dong log (dat trong ngoac kep)")
+    ap.add_argument("--stdin", action="store_true", help="doc nhieu dong tu stdin, cung 1 phien")
+    ap.add_argument("--location", default="/var/log/auth.log")
+    a = ap.parse_args()
+    lines = [l.rstrip("\n") for l in sys.stdin if l.strip()] if a.stdin else ([a.line] if a.line else [])
+    if not lines:
+        ap.error("can 1 dong log hoac --stdin")
+    api = Wazuh()
+    token = None
+    try:
+        for i, ln in enumerate(lines, 1):
+            token, out = api.logtest(ln, token, location=a.location)
+            print("[%d] %s" % (i, ln[:110]))
+            show(out)
+    except WazuhError as e:
+        print("LOI: %s" % e)
+        sys.exit(1)
+    finally:
+        api.logtest_close(token)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,17 @@
+<!--
+  Bai 17 - luat SAN XUAT co san (thuoc bo luat "nguyen trang", KHONG thuoc bai lam cua sinh vien).
+  Day la "canh bao duy nhat" trong cau chuyen: tai khoan UID 0 moi duoc tao.
+  ID 100300 nam ngoai dai cua sinh vien (100270-100299).
+  5902 = "New user added to the system" (useradd). Kiem lai id tren ban Wazuh dang dung (spike S2).
+-->
+<group name="bai17,local,syslog,adduser,">
+  <rule id="100300" level="12">
+    <if_sid>5902</if_sid>
+    <match>UID=0,</match>
+    <description>Tai khoan moi co UID 0 (tuong duong root) duoc tao: $(dstuser)</description>
+    <mitre>
+      <id>T1136.001</id>
+    </mitre>
+    <group>pci_dss_10.2.5,gdpr_IV_32.2,</group>
+  </rule>
+</group>

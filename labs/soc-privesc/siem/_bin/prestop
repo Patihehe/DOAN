@@ -1,10 +1,23 @@
 #!/bin/bash
-# prestop siem: chup bang chung Wazuh phat hien su co (FIM /etc/passwd,/root; dang nhap tu attacker).
+# prestop siem (Bai 17): in ket qua cham phan LUAT (tap kiem tra an) + dap an BAN DO PHU.
+# siem an (TERMINALS 0) -> sinh vien khong doc duoc prestop.stdout nay.
 trap "echo Timed out; exit" SIGTERM
+ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
 
-echo "=== wazuh alerts (FIM passwd/root, backdoor, dang nhap tu 172.20.0.5) ==="
-sudo -n cat /var/ossec/logs/alerts/alerts.log 2>/dev/null \
-  | grep -iE 'syscheck|integrity|passwd|svc-|breach|172.20.0.5|new user|added' | tail -50
+echo "SIEM17_MARKER"
+echo "=== seed ==="
+sudo -n /bin/cat /root/.bai17/seeded 2>/dev/null || echo "NOT_SEEDED"
+
+G="sudo -n /usr/bin/python3 /home/ubuntu/bai17/grade17.py"
+OUT=$($G print 2>/dev/null)
+# Luat vua doi ma grader nen chua kip chay -> cham DONG BO (gioi han de khong qua 30s cua prestop)
+if echo "$OUT" | grep -q '^RULES_STALE'; then
+  timeout 24 $G rules 0 >/dev/null 2>&1 || echo "GRADE_TIMEOUT"
+  OUT=$($G print 2>/dev/null)
+fi
+echo "=== cham luat + ban do phu ==="
+echo "$OUT"
 
 echo "=== agents ==="
 sudo -n /var/ossec/bin/agent_control -l 2>/dev/null
+exit 0
