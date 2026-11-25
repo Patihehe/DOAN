@@ -1,0 +1,46 @@
+#
+# Labtainer Dockerfile - defender (tram analyst: Firefox GUI + cong cu dieu tra)
+#
+ARG registry
+FROM $registry/labtainer.firefox3
+
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client coreutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# === Locale UTF-8 (de cat/nano/less hien tieng Viet CO DAU trong file ctx-*/SOP/read_first) ===
+# Labtainers mo terminal qua login session (PAM/su) -> reset ENV Docker; ghi vao /etc/default/locale
+# + /etc/environment + .bashrc de locale ben vung qua moi cach dang nhap.
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+RUN printf 'LANG=C.UTF-8\nLC_ALL=C.UTF-8\n' > /etc/default/locale \
+    && printf 'LANG=C.UTF-8\nLC_ALL=C.UTF-8\n' >> /etc/environment
+
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+
+USER $user_name
+ENV HOME /home/$user_name
+
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+
+USER root
+RUN printf '\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\n' >> /home/$user_name/.bashrc \
+    && chown $user_name:$user_name /home/$user_name/.bashrc
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]

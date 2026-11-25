@@ -1,0 +1,75 @@
+================================================================================
+ SOC LAB: TRIAGE HÀNG ĐỢI CẢNH BÁO (lần báo giá) - phân loại TP/BTP/FP + ưu tiên + P1
+================================================================================
+
+1. BỐI CẢNH
+--------------------------------------------------------------------------------
+Sau ca đêm, Wazuh SIEM của Công ty X còn một HÀNG ĐỢI 12 ticket chưa xử lý. Đêm qua có: quét lỗ hổng định kỳ,
+pentest thuê ngoài, DevOps deploy, kỹ sư on-call vào hệ thống -> phần lớn ticket là HỢP LỆ. Lẫn trong đó là
+những dấu hiệu đầu tiên của một nhóm APT. Nhiệm vụ của bạn: tách hoạt động hợp lệ khỏi sự cố THẬT, xếp ưu tiên,
+và xử lý 1 ticket P1 chen ngang.
+
+  *** Lần đầu siem khởi động Wazuh ~1-2'. Hàng đợi 12 alert tự lên dashboard; INC-113 xuất hiện trễ ~12'. ***
+
+2. ĐĂNG NHẬP & DỮ LIỆU
+--------------------------------------------------------------------------------
+  Dashboard (Firefox tự mở):  https://172.20.0.20   admin / Q*uJjovx2guqFRqntC568k?lf3evm.jl
+    -> Threat Hunting / Discover, chọn Today / Last 24h -> thấy 12 ticket INC-101..112 (+ INC-113 sau ~12').
+       full_log mỗi alert: INC-1xx|FAMILY=...|HOST=...|NOTE=...
+  Trên trạm defender (nơi bạn làm bài) có sẵn:
+    ~/SOP-triage.txt      : quy trình (ĐỌC TRƯỚC)
+    ~/ctx-assets.txt      : danh mục tài sản + dịch vụ đã duyệt (SVC)
+    ~/ctx-changes.txt     : phiếu thay đổi (CHG)
+    ~/ctx-oncall.txt      : lịch trực on-call (OC)
+    ~/ctx-leave.txt       : hồ sơ nghỉ phép (LV)
+    ~/raw-logs/<host>.log : log thô từng máy để PIVOT điều tra (web01/app02/db-core/vpn-gw)
+    ~/triage.txt ~/leo-thang.txt ~/yeu-cau-tinh-chinh.txt : các phiếu làm bài
+
+3. BA KẾT LUẬN (xem SOP để đầy đủ)
+--------------------------------------------------------------------------------
+  1 = TP  (sự cố thật)             : hoạt động CÓ THẬT và KHÔNG được phép        -> leo thang
+  2 = BTP (thật nhưng được phép)   : có thật NHƯNG khớp ĐỦ phiếu CHG/OC          -> đóng, ghi số phiếu
+  3 = FP  (báo giả)                : hoạt động không xảy ra; luật nổ nhầm trên SVC hợp lệ -> đóng, ghi số SVC
+  Quy tắc: chỉ đóng ticket khi KHỚP ĐỦ (đúng máy + đúng chủ thể + còn hiệu lực + giờ nằm trong khung phiếu).
+  Thiếu bất kỳ điều kiện nào -> coi là SỰ CỐ THẬT (TP). Cảnh giác PHIẾU LỆCH (hết giờ / sai IP / đã hủy).
+
+4. NHIỆM VỤ (theo thứ tự)
+--------------------------------------------------------------------------------
+ B1. ĐỌC ~/SOP-triage.txt. Sau đó TRIAGE: với mỗi ticket, tra ÍT NHẤT 2 nguồn: (a) raw-log cùng máy/IP/user (~/raw-logs/<host>.log),
+     (b) ngữ cảnh ctx-*. Ghi vào ~/triage.txt mỗi dòng:  INC-1xx=V,P,E
+       V = 1/2/3 ; P = ưu tiên 1..4 (BTP và FP luôn 4) ; E = bằng chứng (1 số nguyên):
+         TP  -> octet cuối IP kẻ tấn công / IP C2   (tìm trong raw-log)
+         BTP -> số phiếu CHG hoặc OC                 (vd 7731)
+         FP  -> số SVC                               (vd 4001)
+     MA TRẬN ƯU TIÊN (chỉ cho TP, xét trên máy ghi trong ticket):
+       Giai đoạn\Mức    Cao  TB   Thấp
+       A-đang tác động  P1   P1   P2
+       B-đã truy cập    P1   P2   P3
+       C-chỉ thử        P3   P3   P4
+
+ B2. P1 CHEN NGANG: khi INC-113 xuất hiện (tiến trình [kworker/u4:2] từ /tmp/.k beacon C2 trên db-core),
+     ghi dòng INC-113 vào ~/triage.txt VÀ điền ~/leo-thang.txt (TICKET, HOST, ASSET_LEVEL, STAGE, MITRE,
+     IOC_C2, LIEN_QUAN, DE_XUAT, TOM_TAT). Chú ý chọn MÃ HÀNH ĐỘNG đúng - KHÔNG chọn 4/6/7 (làm mất bằng chứng).
+     Gợi ý: xem ~/raw-logs/db-core.log; tìm ticket trong hàng đợi dùng chính IP kẻ tấn công -> cùng sự cố.
+
+ B3. (Giảng viên chấm tay) ~/yeu-cau-tinh-chinh.txt: mỗi FP ghi luật/trường gây nhầm + đề xuất sửa.
+
+ GỢI Ý ĐIỀU TRA (cấp 2):
+   - SSH brute: grep sshd ~/raw-logs/web01.log  -> IP ngoài 203.0.113.x + "Accepted" = TP; 10.10.0.10 trong 02:00-04:00 = scanner (SVC-4001) = FP.
+   - SQLi: grep apache ~/raw-logs/web01.log -> IP ngoài + 200 kích thước lớn = TP; IP 203.0.113.44 khớp CHG-7731 = BTP.
+   - web file: shell.php POST rồi GET cmd= từ IP ngoài = TP; file từ 10.10.0.30 khớp CHG-7742 = BTP.
+   - DNS: subdomain base64 -> badguy-c2.net = TP (E=octet IP C2 ...100.x); -> av-cloud-security.example = AV (SVC-4002) = FP.
+   - Off-hours: ketoan01 (xem ctx-leave ĐANG NGHỈ) từ IP ngoài = TP; le.tran từ 10.10.0.55 khớp OC-9051 = BTP.
+     (Chú ý CHG-7750 nhắc db-core NHƯNG hết giờ 01:00 -> KHÔNG phủ sự kiện 02:4x -> vẫn TP.)
+   - susp_process app02: /opt/monitoring/sysmon-helper khớp SVC-4003 = FP.
+   - massfile web01: log rotation 03:00 khớp SVC-4004 = FP.
+
+5. NỘP BÀI - CÁC MỤC CHẤM (checkwork)
+--------------------------------------------------------------------------------
+  triage_accuracy   : đúng kết luận >= 10/12 ticket
+  no_missed_tp      : KHÔNG đóng nhầm sự cố thật nào (bắt buộc)
+  low_overescalation: leo thang thừa tối đa 1 ticket hợp lệ
+  priority_ok       : sai ưu tiên tối đa 1 sự cố thật
+  evidence_ok       : đúng bằng chứng E >= 9/12 (đã pivot thật)
+  live_triaged      : INC-113 đúng V=1, P=1, IP C2
+  escalation_note   : phiếu leo-thang.txt đúng trường định lượng + mã hành động (không 4/6/7)

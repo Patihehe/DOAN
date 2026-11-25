@@ -1,0 +1,66 @@
+#!/bin/bash
+# Cham bai triage tren defender: doc ~/triage.txt + ~/leo-thang.txt, doi chieu dap an.
+# Dap an V (ket luan) va P (uu tien) CO DINH; bang chung E suy ra tu raw-log (IOC ngau nhien per-student).
+# Chi in marker OK, KHONG in dap an.
+trap "echo Timed out; exit" SIGTERM
+echo "PRESTOP_MARKER"
+
+H="$HOME"
+T="$H/triage.txt"
+L="$H/leo-thang.txt"
+
+# --- Suy ra IOC that tu raw-log (ground truth cho E cua cac ticket TP) ---
+ATK=$(grep -oE '203\.0\.113\.[0-9]+' "$H/raw-logs/web01.log" 2>/dev/null | head -1 | grep -oE '[0-9]+$')
+C2A=$(grep -oE '198\.51\.100\.[0-9]+' "$H/raw-logs/app02.log" 2>/dev/null | head -1 | grep -oE '[0-9]+$')
+C2D=$(grep -oE '192\.0\.2\.[0-9]+' "$H/raw-logs/db-core.log" 2>/dev/null | head -1 | grep -oE '[0-9]+$')
+
+# --- Dap an ---
+declare -A KV=( [101]=1 [102]=3 [103]=1 [104]=2 [105]=1 [106]=2 [107]=1 [108]=3 [109]=1 [110]=2 [111]=3 [112]=3 [113]=1 )
+declare -A KP=( [101]=2 [102]=4 [103]=2 [104]=4 [105]=1 [106]=4 [107]=2 [108]=4 [109]=1 [110]=4 [111]=4 [112]=4 [113]=1 )
+declare -A KE=( [101]=$ATK [102]=4001 [103]=$ATK [104]=7731 [105]=$ATK [106]=7742 [107]=$C2A [108]=4002 [109]=$ATK [110]=9051 [111]=4003 [112]=4004 [113]=$C2D )
+
+# Lay truong tu dong INC-n ( "V,P,E" )
+field(){ sed -n "s/^INC-$1=//p" "$T" 2>/dev/null | head -1 | tr -d ' \r'; }
+
+vcorrect=0; ecorrect=0; miss_tp=0; overesc=0; pwrong=0
+for n in 101 102 103 104 105 106 107 108 109 110 111 112 113; do
+  line=$(field "$n")
+  V=$(echo "$line" | cut -d, -f1)
+  P=$(echo "$line" | cut -d, -f2)
+  E=$(echo "$line" | cut -d, -f3 | tr -cd '0-9')
+  [ "$V" = "${KV[$n]}" ] && vcorrect=$((vcorrect+1))
+  [ -n "$E" ] && [ "$E" = "${KE[$n]}" ] && ecorrect=$((ecorrect+1))
+  if [ "${KV[$n]}" = "1" ]; then
+    [ "$V" != "1" ] && miss_tp=$((miss_tp+1))
+    [ "$V" = "1" ] && [ "$P" != "${KP[$n]}" ] && pwrong=$((pwrong+1))
+  else
+    [ "$V" = "1" ] && overesc=$((overesc+1))
+  fi
+done
+
+[ "$vcorrect" -ge 10 ] && echo "TRIAGE_ACCURACY_OK"
+[ "$miss_tp" -eq 0 ]   && echo "NO_MISSED_TP"
+[ "$overesc" -le 1 ]   && echo "LOW_OVERESCALATION"
+[ "$pwrong" -le 1 ]    && echo "PRIORITY_OK"
+[ "$ecorrect" -ge 9 ]  && echo "EVIDENCE_OK"
+
+# --- INC-113 live: V=1, P=1, E=C2D ---
+l113=$(field 113)
+V113=$(echo "$l113" | cut -d, -f1)
+P113=$(echo "$l113" | cut -d, -f2)
+E113=$(echo "$l113" | cut -d, -f3 | tr -cd '0-9')
+if [ "$V113" = "1" ] && [ "$P113" = "1" ] && [ -n "$C2D" ] && [ "$E113" = "$C2D" ]; then
+  echo "LIVE_TRIAGED"
+fi
+
+# --- Phieu leo thang INC-113 ---
+gl(){ sed -n "s/^$1=//p" "$L" 2>/dev/null | head -1 | sed 's/#.*//' | tr -d ' \r'; }
+AL=$(gl ASSET_LEVEL); ST=$(gl STAGE); IC=$(gl IOC_C2 | tr -cd '0-9'); LQ=$(gl LIEN_QUAN | tr -cd '0-9')
+DX=",$(gl DE_XUAT | tr -d ' '),"
+has(){ echo "$DX" | grep -q ",$1,"; }
+if [ "$AL" = "1" ] && [ "$ST" = "1" ] && [ -n "$C2D" ] && [ "$IC" = "$C2D" ] && [ "$LQ" = "109" ] \
+   && has 3 && has 5 && ! has 4 && ! has 6 && ! has 7; then
+  echo "ESCALATION_NOTE_OK"
+fi
+
+exit 0

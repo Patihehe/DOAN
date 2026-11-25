@@ -1,0 +1,99 @@
+#
+# siem - dung image nen soc-wazuh (Wazuh cai san). Entrypoint khoi phuc quyen Wazuh truoc init.
+# LUU Y: anh soc-wazuh KHONG chay boot-hook Labtainers -> fixlocal.sh cua siem KHONG chay.
+# Vi vay TOAN BO seeding hang doi alert duoc BAKE vao anh nay (rule + localfile + seed log + seeder nen).
+#
+ARG registry
+FROM localhost:5000/soc-wazuh:latest
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+# === Dong bo mui gio voi VM (ICT = UTC+7) ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# === SEEDING (bake) 1: bo rule ho canh bao (match program_name soctriage + FAMILY=...) ===
+RUN printf '%s\n' \
+  '<group name="local,soctriage_queue,">' \
+  '  <rule id="100600" level="8"><program_name>soctriage</program_name><match>FAMILY=ssh_bruteforce</match><description>SSH brute-force suspected</description><mitre><id>T1110</id></mitre></rule>' \
+  '  <rule id="100601" level="10"><program_name>soctriage</program_name><match>FAMILY=sqli</match><description>Possible SQL injection against web app</description><mitre><id>T1190</id></mitre></rule>' \
+  '  <rule id="100602" level="12"><program_name>soctriage</program_name><match>FAMILY=webfile</match><description>New executable file in web directory (possible web shell)</description><mitre><id>T1505</id></mitre></rule>' \
+  '  <rule id="100603" level="10"><program_name>soctriage</program_name><match>FAMILY=dns_tunnel</match><description>Long DNS subdomain to rare domain (possible tunneling)</description><mitre><id>T1048</id></mitre></rule>' \
+  '  <rule id="100604" level="8"><program_name>soctriage</program_name><match>FAMILY=offhours_login</match><description>Off-hours interactive login</description><mitre><id>T1078</id></mitre></rule>' \
+  '  <rule id="100605" level="12"><program_name>soctriage</program_name><match>FAMILY=susp_process</match><description>Suspicious masquerading process / beaconing</description><mitre><id>T1055</id></mitre></rule>' \
+  '  <rule id="100606" level="7"><program_name>soctriage</program_name><match>FAMILY=massfile</match><description>Mass file modification</description><mitre><id>T1070</id></mitre></rule>' \
+  '</group>' \
+  >> /var/ossec/etc/rules/local_rules.xml
+#
+# === SEEDING (bake) 2: localfile cho manager giam sat log hang doi + tao san log ===
+RUN printf '%s\n' '<ossec_config><localfile><log_format>syslog</log_format><location>/var/log/soc-queue.log</location></localfile></ossec_config>' >> /var/ossec/etc/ossec.conf \
+    && touch /var/log/soc-queue.log && chmod 666 /var/log/soc-queue.log
+#
+# === SEEDING (bake) 3: script seeder nen - ghi 12 ticket + hen INC-113 (co co chong seed trung) ===
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  '# ensure_mgr: anh soc-wazuh hay fail wazuh-manager luc first-boot (boot-race indexer) -> restart cho song.' \
+  'mgr_active(){ [ "$(systemctl is-active wazuh-manager 2>/dev/null)" = "active" ]; }' \
+  'ensure_mgr(){ for i in $(seq 1 30); do mgr_active && return 0; sleep 2; done; for r in 1 2 3; do systemctl restart wazuh-manager >/dev/null 2>&1; for j in $(seq 1 25); do mgr_active && return 0; sleep 3; done; done; }' \
+  'ensure_mgr' \
+  '[ -f /var/ossec/.soc_seeded ] && exit 0' \
+  'Q=/var/log/soc-queue.log' \
+  'sleep 15' \
+  'emit(){ echo "$(date "+%b %d %H:%M:%S") siem soctriage: $1|NOTE=$2" >> "$Q"; sleep 1; }' \
+  'emit "INC-101|FAMILY=ssh_bruteforce|HOST=web01" "many failed SSH logins then one success"' \
+  'emit "INC-102|FAMILY=ssh_bruteforce|HOST=web01" "burst of SSH auth attempts from one internal host"' \
+  'emit "INC-103|FAMILY=sqli|HOST=web01" "SQLi patterns in access log, one client large HTTP 200"' \
+  'emit "INC-104|FAMILY=sqli|HOST=web01" "SQLi patterns in access log from one source"' \
+  'emit "INC-105|FAMILY=webfile|HOST=web01" "new .php in uploads then executed"' \
+  'emit "INC-106|FAMILY=webfile|HOST=web01" "several new files under webroot"' \
+  'emit "INC-107|FAMILY=dns_tunnel|HOST=app02" "repeated long base64-like subdomains to rare domain"' \
+  'emit "INC-108|FAMILY=dns_tunnel|HOST=app02" "long subdomain lookups to a rare domain"' \
+  'emit "INC-109|FAMILY=offhours_login|HOST=db-core" "02:4x login for a finance account from new IP"' \
+  'emit "INC-110|FAMILY=offhours_login|HOST=vpn-gw" "02:1x VPN login from a known IP"' \
+  'emit "INC-111|FAMILY=susp_process|HOST=app02" "process name matches implant signature"' \
+  'emit "INC-112|FAMILY=massfile|HOST=web01" "hundreds of files changed under /var/log and /var/www"' \
+  'touch /var/ossec/.soc_seeded' \
+  '( sleep 720; echo "$(date "+%b %d %H:%M:%S") siem soctriage: INC-113|FAMILY=susp_process|HOST=db-core|NOTE=[kworker/u4:2] from /tmp/.k beaconing C2 every 30s" >> "$Q" ) &' \
+  > /usr/local/bin/soc-seeder.sh && chmod +x /usr/local/bin/soc-seeder.sh
+#
+# === Entrypoint: khoi phuc quyen Wazuh + launch seeder nen truoc khi exec init ===
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'for u in wazuh-indexer wazuh-dashboard; do' \
+  '  id "$u" >/dev/null 2>&1 || continue' \
+  '  chown -R "$u:$u" /usr/share/$u /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+  'done' \
+  'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+  'setsid bash /usr/local/bin/soc-seeder.sh >/var/log/soc-seeder.log 2>&1 </dev/null &' \
+  'exec /sbin/init --log-target=journal 3>&1' \
+  > /entrypoint.sh && chmod +x /entrypoint.sh
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+RUN mkdir -p /home/$user_name/.local && echo "soc-alert-triage" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
+CMD ["/entrypoint.sh"]

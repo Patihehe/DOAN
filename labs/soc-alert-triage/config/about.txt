@@ -1,0 +1,7 @@
+SOC Lab - Triage hàng đợi cảnh báo (lần báo giá): phân loại TP/BTP/FP + xếp ưu tiên + xử lý P1 chen ngang.
+Sau ca đêm, Wazuh còn ~12 ticket chưa xử lý - lẫn giữa hoạt động hợp lệ (quét lỗ hổng, pentest theo phiếu,
+deploy, kỹ sư on-call) là những dấu hiệu đầu tiên của một nhóm APT. Analyst phải: đọc SOP, điều tra
+đối chiếu ngữ cảnh doanh nghiệp (tài sản/phiếu thay đổi/nghỉ phép/lịch trực), kết luận từng ticket
+(1=TP thật, 2=BTP thật-nhưng-được-phép, 3=FP báo giả), xếp ưu tiên theo ma trận, và xử lý 1 ticket P1
+chen ngang (INC-113 - tiến trình ngụy trang beacon C2). Chấm: độ chính xác phân loại, không bỏ sót TP,
+không leo thang nhầm FP, đúng bằng chứng (đã pivot thật).
