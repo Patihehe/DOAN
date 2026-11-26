@@ -1,8 +1,18 @@
 #!/bin/bash
-# prestop defender (Bai 18) - KHUNG P0. P4: goi 'sudo -n /usr/local/sbin/bai18-thu-thap' (root) de in
-# phieu DA DONG BANG + nhat ky watcher (moc lan dau ghi tung INC), nhat ky kiem-thu-luat / goi-y, khao sat.
+# prestop defender (Bai 18): 'sudo -n /usr/local/sbin/bai18-thu-thap' (root) in phieu DA DONG BANG + nhat ky
+# watcher (moc lan dau ghi tung INC), nhat ky kiem-thu-luat / goi-y, khao sat.
+# Labtainers LOI grader neu result thieu -> thu-thap loi/qua gio thi in gia tri giu cho (999998, moi goal N).
 trap "echo Timed out; exit" SIGTERM
 ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
 echo "DEFENDER18_MARKER"
-sudo -n /usr/local/sbin/bai18-thu-thap 2>/dev/null
+OUT=$(timeout 20 sudo -n /usr/local/sbin/bai18-thu-thap 2>/dev/null)
+if echo "$OUT" | grep -q "^ANS_N="; then
+  echo "$OUT"
+else
+  X=999998
+  echo "PRESTOP_FALLBACK"
+  for k in $(seq 1 13); do echo "INC_$k=$X ANS_V_$k=$X ANS_P_$k=$X ANS_E_$k=$X"; done
+  echo "ANS_SC_TK_C=0 ANS_SC_HOST_C=0 ANS_SC_GIAI_DOAN=$X"
+  echo "LT_TICKET=$X LT_HOST_C=0 LT_ASSET_LEVEL=$X LT_STAGE=$X LT_MITRE_C=0 LT_IOC_C2=$X LT_DE_XUAT_C=0"
+fi
 exit 0

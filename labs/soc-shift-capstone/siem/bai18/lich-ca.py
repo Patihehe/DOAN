@@ -9,7 +9,7 @@
 #   - shift.json (khong dap an) cho shiftd/defender moi vong lap
 # Che do nhanh (phat trien): echo 0.1667 > /root/.bai18/scale  (1 ca = 15'). XOA truoc khi phat hanh.
 # ============================================================================
-import json, os, random, shutil, sys, time
+import json, os, subprocess, random, shutil, sys, time
 
 HERE = "/home/ubuntu/bai18"
 sys.path.insert(0, os.path.join(HERE, "lib"))
@@ -173,6 +173,8 @@ def handle(e, s, st, ix, t0, now, seed):
         release_request("R-B", "dev-rb.jsonl", YC_RB.format(gio=time.strftime("%H:%M"), han=han))
     elif k == "end":
         open(os.path.join(ST, "SHIFT_END"), "w").write("%d\n" % int(now))
+        # cham + luu ban in sau het ca (prestop du phong neu prestop qua 30s)
+        subprocess.run(["systemctl", "start", "--no-block", "grade-bai18.service"])
 
 
 if __name__ == "__main__":

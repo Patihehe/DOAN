@@ -25,7 +25,7 @@ ALERTS = "/var/ossec/logs/alerts/alerts.json"
 TOOL_USER, TOOL_PASS = "soc-tool", "Soc.Tool.2026!"
 RANGES = replay.parse_ranges(families.RANGES)          # ra, rb
 RB_RECALL_GATE = 0.9
-STORM_MIN_PEAK = 10          # duoi muc nay = khong do duoc bao (siem tat giua ca) -> LIVE_GAP
+STORM_EXPECTED = 20          # canh bao R-B/phut khi bao CHUA xu ly (VM: 21-25) - moc 'giam 80%'
 
 
 def canon(nums):
@@ -250,11 +250,13 @@ def do_live():
     peak = max(base) if base else 0
     contain = None
     end_min = int(at["END"] // 60)
-    if peak:
-        for m in range(m0 + 1, end_min - 1):          # can 2 phut lien tiep TRUOC het ca
-            if all(per_min.get(x, 0) <= 0.2 * peak for x in (m, m + 1)):
-                contain = m
-                break
+    # moc so sanh = max(dinh do duoc, toc do bao CHUA xu ly): SV sua R-B NGAY khi bao vua bat dau -> dinh
+    # do duoc nho, khong duoc coi la "khong co bao" (gap tren VM 27/11: dinh 9, sua sau 26s)
+    ref = max(peak, STORM_EXPECTED)
+    for m in range(m0 + 1, end_min - 1):              # can 2 phut lien tiep TRUOC het ca
+        if all(per_min.get(x, 0) <= 0.2 * ref for x in (m, m + 1)):
+            contain = m
+            break
     # phut THEO CA THAT (che do nhanh chia moc cho scale) -> nguong SOP 10'/20'/30' dung chung
     sc = float(plan.get("scale") or 1.0)
     mn = lambda sec: int(round(sec / 60.0 / sc))  # noqa: E731
@@ -275,15 +277,40 @@ def do_live():
     if c5_first:
         out.append("C5_SEEN")
     # siem tat giua ca (stoplab) -> luong that bi hong: khong tinh moc khoanh vung theo duong cong bao
-    restarts = 0
+    # LIVE_GAP = lich-ca khoi dong lai (siem tat/khoi dong lai) trong khoang [R-B, het ca]
+    restarts, gap = 0, False
     try:
-        restarts = sum(1 for l in open(os.path.join(ST, "lich-ca.log")) if "bat dau: T0=%d " % t0 in l) - 1
-    except OSError:
+        base_day = time.mktime(time.localtime(t0)[:3] + (0, 0, 0, 0, 0, -1))
+        for l in open(os.path.join(ST, "lich-ca.log")):
+            if "bat dau: T0=%d " % t0 not in l:
+                continue
+            restarts += 1
+            h, mi, se = (int(x) for x in l[:8].split(":"))
+            ts = base_day + h * 3600 + mi * 60 + se
+            if ts < t0 - 60:
+                ts += 86400                                   # qua nua dem
+            if restarts > 1 and t0 + at["R-B"] - 60 <= ts <= end + 60:
+                gap = True
+    except (OSError, ValueError):
         pass
-    out.append("LICH_CA_RESTARTS=%d" % max(0, restarts))
-    if time.time() >= t0 + at["R-B"] and peak < STORM_MIN_PEAK:
+    out.append("LICH_CA_RESTARTS=%d" % max(0, restarts - 1))
+    if gap:
         out.append("LIVE_GAP")
     return out
+
+
+def giu_cho():
+    """Gia tri giu cho cho MOI result GROUP cua goals.config: Labtainers LOI grader neu result thieu
+    (gap tren VM). 999999 khong bao gio trung bai lam (defender dung 999998 cho o bo trong)."""
+    X = 999999
+    for k in range(1, 14):
+        print("GT_INC_%d=%d GT_V_%d=%d GT_P_%d=%d GT_E_%d=%d GT_ISP1_%d=%d" % (k, X, k, X, k, X, k, X, k, X))
+    print("GT_SC_TK_C=%d GT_SC_HOST_C=%d GT_SC_HOSTIP_C=%d GT_SC_GIAI_DOAN=%d" % (X, X, X, X))
+    print("GT_SC_T1=%d GT_SC_T2=%d GT_SC_T3=%d GT_SC_T4=%d" % (X, X, X, X))
+    print("GT_SC_ASSET=%d GT_SC_STAGE=%d GT_SC_MITRE_C=%d GT_SC_IOC_C2=%d GT_SC_DE_XUAT_C=%d" % (X, X, X, X, X))
+
+
+CACHE = os.path.join(ST, "print.cache")
 
 
 def do_print(all_=False):
@@ -301,6 +328,8 @@ def do_print(all_=False):
     if "END" not in dn and not all_:
         # TRONG CA: khong in dap an / ket qua tap an (checkwork giua ca KHONG duoc thanh "may do dap an")
         print("SHIFT_RUNNING")
+        giu_cho()
+        print("PRINT_DONE")
         return
     # dap an theo thu tu PHAT (k = 1..n); cung thu tu ma defender in
     rel = sorted([(dn[e["id"]], e["inc"]) for e in plan["events"] if e["kind"] == "ticket" and e["id"] in dn])
@@ -331,8 +360,12 @@ def do_print(all_=False):
         print(txt.strip())
         if "RULES_SHA=%s" % rules_sha() not in txt:
             print("RULES_STALE")
-    for line in do_live():
-        print(line)
+    try:
+        for line in do_live():
+            print(line)
+    except Exception as e:  # noqa: BLE001
+        print("LIVE_ERROR=%s" % str(e)[:100].replace("\n", " "))
+    print("PRINT_DONE")          # prestop chi tin ban in co dong nay (khong bi cat giua chung)
 
 
 MAU_XML = """<group name="bai18,">
@@ -394,5 +427,22 @@ if __name__ == "__main__":
         do_mau(cmd == "mau-nap")
     elif cmd == "live":
         print("\n".join(do_live()))
+    elif cmd == "cached":
+        # prestop du phong (nhanh, khong indexer): ban in sau het ca do grade-bai18 luu; khong co -> giu cho
+        if os.path.exists(CACHE):
+            sys.stdout.write(open(CACHE).read())
+            print("FROM_CACHE")
+        else:
+            print("SIEM18_MARKER")
+            print("PRESTOP_FALLBACK")
+            giu_cho()
+    elif "--cache" in sys.argv:
+        # grade-bai18 (sau moi lan cham + sau het ca): luu ban in cho prestop du phong
+        import contextlib, io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            do_print()
+        if "SHIFT_END=Y" in buf.getvalue():
+            write_atomic(CACHE, buf.getvalue())
     else:
         do_print("--all" in sys.argv)          # --all: CHI phat trien (in ca khi chua het ca)

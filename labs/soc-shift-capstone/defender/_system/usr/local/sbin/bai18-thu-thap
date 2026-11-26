@@ -31,6 +31,12 @@ def kv(text):
     return out
 
 
+# Moi truong so ma goals.config doc PHAI luon co mat: Labtainers bao loi grader neu result thieu.
+# Bo trong -> NA (khong bao gio trung dap an; siem giua ca dung 999999).
+NA = 999998
+NSLOT = 13
+
+
 def canon(vals):
     """GIONG grade18.canon tren siem: tap so -> 1 + moi so dem 0 thanh 5 chu so (0 neu rong)."""
     v = sorted({int(x) for x in vals})
@@ -72,13 +78,15 @@ def main():
         n = inc[4:]
         a = ans.get(n)
         line = "INC_%d=%s" % (k, n)
-        if a:
-            line += " ANS_V_%d=%s ANS_P_%d=%s ANS_E_%d=%s" % (k, a[0], k, a[1], k, a[2])
+        a = a or (NA, NA, NA)            # chua co dong -> gia tri giu cho (Labtainers loi neu result thieu)
+        line += " ANS_V_%d=%s ANS_P_%d=%s ANS_E_%d=%s" % (k, a[0], k, a[1], k, a[2])
         if n in first:
             # MTTA (giay) do TREN defender: lan dau ghi dong - luc ticket phat (shift.json); SOP: P1 <= 10'
             lat = first[n] - ts
             line += " FIRST_%d=%d LAT_%d=%d LATOK_%d=%d" % (k, first[n], k, lat, k, 1 if lat <= 600 * scale else 0)
         print(line)
+    for k in range(len(tickets) + 1, NSLOT + 1):          # slot chua phat (giua ca) - giu cho
+        print("INC_%d=%d ANS_V_%d=%d ANS_P_%d=%d ANS_E_%d=%d" % (k, NA, k, NA, k, NA, k, NA))
     print("ANS_N=%d" % len(tickets))
     print("SCALE=%s" % scale)
     sc = kv(read("su-co.txt"))
@@ -86,12 +94,12 @@ def main():
     print("ANS_SC_TK_C=%d" % canon(re.findall(r"\d+", sc.get("SC1") or "")))
     print("ANS_SC_HOST=%s" % (sc.get("SC1_HOST") or "").strip().lower())
     print("ANS_SC_HOST_C=%d" % crc(sc.get("SC1_HOST")))
-    print("ANS_SC_GIAI_DOAN=%s" % (re.findall(r"\d+", sc.get("SC1_GIAI_DOAN", "")) or [""])[0])
+    print("ANS_SC_GIAI_DOAN=%s" % (re.findall(r"\d+", sc.get("SC1_GIAI_DOAN", "")) or [NA])[0])
     lt = kv(read("leo-thang/SC1.txt"))
     for k in ("TICKET", "HOST", "ASSET_LEVEL", "STAGE", "MITRE", "IOC_C2", "LIEN_QUAN", "DE_XUAT"):
         v = lt.get(k, "")
         if k in ("ASSET_LEVEL", "STAGE", "IOC_C2", "LIEN_QUAN", "TICKET"):
-            v = (re.findall(r"\d+", v) or [""])[0]
+            v = (re.findall(r"\d+", v) or [NA])[0]
         elif k == "MITRE":                       # T1505.003 -> 1505 (chi ky thuat cha)
             v = ",".join(sorted(set(re.findall(r"(\d+)(?:\.\d+)?", v)), key=int))
         elif k == "DE_XUAT":

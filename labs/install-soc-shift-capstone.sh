@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# soc-shift-capstone - Bai 18: Ca truc mo phong (capstone) - P0-P6
+# soc-shift-capstone - Bai 18: Ca truc mo phong (capstone) - P0-P7
 # Chay tren VM:  bash install-soc-shift-capstone.sh ; roi rebuild soc-shift-capstone
 # (File sinh tu dong boi labs/_shared/make-install.py - sua ma nguon trong labs/soc-shift-capstone/ roi sinh lai.)
 # ============================================================================
@@ -238,12 +238,22 @@ __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/defender/_bin"
 cat > "$LAB/defender/_bin/prestop" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
 #!/bin/bash
-# prestop defender (Bai 18) - KHUNG P0. P4: goi 'sudo -n /usr/local/sbin/bai18-thu-thap' (root) de in
-# phieu DA DONG BANG + nhat ky watcher (moc lan dau ghi tung INC), nhat ky kiem-thu-luat / goi-y, khao sat.
+# prestop defender (Bai 18): 'sudo -n /usr/local/sbin/bai18-thu-thap' (root) in phieu DA DONG BANG + nhat ky
+# watcher (moc lan dau ghi tung INC), nhat ky kiem-thu-luat / goi-y, khao sat.
+# Labtainers LOI grader neu result thieu -> thu-thap loi/qua gio thi in gia tri giu cho (999998, moi goal N).
 trap "echo Timed out; exit" SIGTERM
 ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
 echo "DEFENDER18_MARKER"
-sudo -n /usr/local/sbin/bai18-thu-thap 2>/dev/null
+OUT=$(timeout 20 sudo -n /usr/local/sbin/bai18-thu-thap 2>/dev/null)
+if echo "$OUT" | grep -q "^ANS_N="; then
+  echo "$OUT"
+else
+  X=999998
+  echo "PRESTOP_FALLBACK"
+  for k in $(seq 1 13); do echo "INC_$k=$X ANS_V_$k=$X ANS_P_$k=$X ANS_E_$k=$X"; done
+  echo "ANS_SC_TK_C=0 ANS_SC_HOST_C=0 ANS_SC_GIAI_DOAN=$X"
+  echo "LT_TICKET=$X LT_HOST_C=0 LT_ASSET_LEVEL=$X LT_STAGE=$X LT_MITRE_C=0 LT_IOC_C2=$X LT_DE_XUAT_C=0"
+fi
 exit 0
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/defender/_bin"
@@ -1138,6 +1148,12 @@ def kv(text):
     return out
 
 
+# Moi truong so ma goals.config doc PHAI luon co mat: Labtainers bao loi grader neu result thieu.
+# Bo trong -> NA (khong bao gio trung dap an; siem giua ca dung 999999).
+NA = 999998
+NSLOT = 13
+
+
 def canon(vals):
     """GIONG grade18.canon tren siem: tap so -> 1 + moi so dem 0 thanh 5 chu so (0 neu rong)."""
     v = sorted({int(x) for x in vals})
@@ -1179,13 +1195,15 @@ def main():
         n = inc[4:]
         a = ans.get(n)
         line = "INC_%d=%s" % (k, n)
-        if a:
-            line += " ANS_V_%d=%s ANS_P_%d=%s ANS_E_%d=%s" % (k, a[0], k, a[1], k, a[2])
+        a = a or (NA, NA, NA)            # chua co dong -> gia tri giu cho (Labtainers loi neu result thieu)
+        line += " ANS_V_%d=%s ANS_P_%d=%s ANS_E_%d=%s" % (k, a[0], k, a[1], k, a[2])
         if n in first:
             # MTTA (giay) do TREN defender: lan dau ghi dong - luc ticket phat (shift.json); SOP: P1 <= 10'
             lat = first[n] - ts
             line += " FIRST_%d=%d LAT_%d=%d LATOK_%d=%d" % (k, first[n], k, lat, k, 1 if lat <= 600 * scale else 0)
         print(line)
+    for k in range(len(tickets) + 1, NSLOT + 1):          # slot chua phat (giua ca) - giu cho
+        print("INC_%d=%d ANS_V_%d=%d ANS_P_%d=%d ANS_E_%d=%d" % (k, NA, k, NA, k, NA, k, NA))
     print("ANS_N=%d" % len(tickets))
     print("SCALE=%s" % scale)
     sc = kv(read("su-co.txt"))
@@ -1193,12 +1211,12 @@ def main():
     print("ANS_SC_TK_C=%d" % canon(re.findall(r"\d+", sc.get("SC1") or "")))
     print("ANS_SC_HOST=%s" % (sc.get("SC1_HOST") or "").strip().lower())
     print("ANS_SC_HOST_C=%d" % crc(sc.get("SC1_HOST")))
-    print("ANS_SC_GIAI_DOAN=%s" % (re.findall(r"\d+", sc.get("SC1_GIAI_DOAN", "")) or [""])[0])
+    print("ANS_SC_GIAI_DOAN=%s" % (re.findall(r"\d+", sc.get("SC1_GIAI_DOAN", "")) or [NA])[0])
     lt = kv(read("leo-thang/SC1.txt"))
     for k in ("TICKET", "HOST", "ASSET_LEVEL", "STAGE", "MITRE", "IOC_C2", "LIEN_QUAN", "DE_XUAT"):
         v = lt.get(k, "")
         if k in ("ASSET_LEVEL", "STAGE", "IOC_C2", "LIEN_QUAN", "TICKET"):
-            v = (re.findall(r"\d+", v) or [""])[0]
+            v = (re.findall(r"\d+", v) or [NA])[0]
         elif k == "MITRE":                       # T1505.003 -> 1505 (chi ky thuat cha)
             v = ",".join(sorted(set(re.findall(r"(\d+)(?:\.\d+)?", v)), key=int))
         elif k == "DE_XUAT":
@@ -1661,7 +1679,7 @@ RUN mkdir -p /srv/shiftd /etc/systemd/system/multi-user.target.wants \
    'PathChanged=/var/ossec/etc/rules/local_rules.xml' 'Unit=grade-bai18.service' '[Install]' 'WantedBy=multi-user.target' \
    > /etc/systemd/system/grade-bai18.path \
  && printf '%s\n' '[Unit]' 'Description=Bai 18 - phat lai tap an R-A/R-B' 'After=seed-bai18.service' '[Service]' 'Type=oneshot' \
-   'TimeoutStartSec=600' 'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 20' > /etc/systemd/system/grade-bai18.service \
+   'TimeoutStartSec=600' 'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 20' 'ExecStartPost=-/usr/bin/python3 /home/ubuntu/bai18/grade18.py print --cache' > /etc/systemd/system/grade-bai18.service \
  && for u in seed-bai18.service lich-ca.service shiftd.service grade-bai18.path; do \
       ln -sf /etc/systemd/system/$u /etc/systemd/system/multi-user.target.wants/$u; done
 #
@@ -1941,7 +1959,7 @@ ra_quality = boolean : ( _siem_end and _rules_valid and _ra_p90 and _ra_r90 )
 rb_quality = boolean : ( _siem_end and _rules_valid and _rb_p90 and _rb_r90 )
 c3_seen = boolean : ( _siem_end and _c3 )
 c5_seen = boolean : ( _siem_end and _c5 )
-storm_contained = boolean : ( _siem_end and _rb_contain20 )
+storm_contained = boolean : ( _siem_end and _rb_contain20 and _rb_not_blind )
 
 # --- sau ca ---
 ban_giao = boolean : ( _frozen and _bg_full )
@@ -2142,16 +2160,34 @@ __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/siem/_bin"
 cat > "$LAB/siem/_bin/prestop" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
 #!/bin/bash
-# prestop siem (Bai 18): dap an theo thu tu phat + ket qua cham luat (tap an) + so lieu luong that (alerts.json).
-# Luat doi ma chua cham lai (RULES_STALE) -> cham ngay (gioi han 24s vi prestop co timeout 30s).
+# prestop siem (Bai 18): dap an theo thu tu phat + ket qua cham luat (tap an) + so lieu luong that.
+# Labtainers cat prestop o ~30s; neu siem in thieu result, grader LOI ca bai (gap tren VM 27/11:
+# mau-nap ngay truoc checkwork -> cham lai chiem khoa -> "Timed out").
+#   1) in truc tiep, toi da 20s
+#   2) khong kip -> ban in sau het ca do grade-bai18 luu (FROM_CACHE)
+#   3) chua co ban luu -> gia tri giu cho (PRESTOP_FALLBACK): moi goal N nhung grader KHONG loi
+# Khong cham lai luat trong prestop nua: grade-bai18 tu cham khi file luat doi (1-2 phut).
 trap "echo Timed out; exit" SIGTERM
 ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
-OUT=$(sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>&1)
-if echo "$OUT" | grep -q RULES_STALE; then
-  timeout 24 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 0 >/dev/null 2>&1
-  OUT=$(sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>&1)
+OUT=$(timeout 20 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>/dev/null)
+if ! echo "$OUT" | grep -q "^PRINT_DONE" ; then
+  OUT=$(timeout 5 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py cached 2>/dev/null)
+fi
+if [ -z "$OUT" ]; then
+  OUT="SIEM18_MARKER
+PRESTOP_FALLBACK"
+  X=999999
+  for k in $(seq 1 13); do OUT="$OUT
+GT_INC_$k=$X GT_V_$k=$X GT_P_$k=$X GT_E_$k=$X GT_ISP1_$k=$X"; done
+  OUT="$OUT
+GT_SC_TK_C=$X GT_SC_HOST_C=$X GT_SC_HOSTIP_C=$X GT_SC_GIAI_DOAN=$X
+GT_SC_T1=$X GT_SC_T2=$X GT_SC_T3=$X GT_SC_T4=$X
+GT_SC_ASSET=$X GT_SC_STAGE=$X GT_SC_MITRE_C=$X GT_SC_IOC_C2=$X GT_SC_DE_XUAT_C=$X"
 fi
 echo "$OUT"
+if echo "$OUT" | grep -q RULES_STALE; then
+  echo "# Luat vua doi, siem dang cham lai - checkwork lai sau 1-2 phut."
+fi
 exit 0
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/siem/bai18"
@@ -2201,7 +2237,7 @@ ALERTS = "/var/ossec/logs/alerts/alerts.json"
 TOOL_USER, TOOL_PASS = "soc-tool", "Soc.Tool.2026!"
 RANGES = replay.parse_ranges(families.RANGES)          # ra, rb
 RB_RECALL_GATE = 0.9
-STORM_MIN_PEAK = 10          # duoi muc nay = khong do duoc bao (siem tat giua ca) -> LIVE_GAP
+STORM_EXPECTED = 20          # canh bao R-B/phut khi bao CHUA xu ly (VM: 21-25) - moc 'giam 80%'
 
 
 def canon(nums):
@@ -2426,11 +2462,13 @@ def do_live():
     peak = max(base) if base else 0
     contain = None
     end_min = int(at["END"] // 60)
-    if peak:
-        for m in range(m0 + 1, end_min - 1):          # can 2 phut lien tiep TRUOC het ca
-            if all(per_min.get(x, 0) <= 0.2 * peak for x in (m, m + 1)):
-                contain = m
-                break
+    # moc so sanh = max(dinh do duoc, toc do bao CHUA xu ly): SV sua R-B NGAY khi bao vua bat dau -> dinh
+    # do duoc nho, khong duoc coi la "khong co bao" (gap tren VM 27/11: dinh 9, sua sau 26s)
+    ref = max(peak, STORM_EXPECTED)
+    for m in range(m0 + 1, end_min - 1):              # can 2 phut lien tiep TRUOC het ca
+        if all(per_min.get(x, 0) <= 0.2 * ref for x in (m, m + 1)):
+            contain = m
+            break
     # phut THEO CA THAT (che do nhanh chia moc cho scale) -> nguong SOP 10'/20'/30' dung chung
     sc = float(plan.get("scale") or 1.0)
     mn = lambda sec: int(round(sec / 60.0 / sc))  # noqa: E731
@@ -2451,15 +2489,40 @@ def do_live():
     if c5_first:
         out.append("C5_SEEN")
     # siem tat giua ca (stoplab) -> luong that bi hong: khong tinh moc khoanh vung theo duong cong bao
-    restarts = 0
+    # LIVE_GAP = lich-ca khoi dong lai (siem tat/khoi dong lai) trong khoang [R-B, het ca]
+    restarts, gap = 0, False
     try:
-        restarts = sum(1 for l in open(os.path.join(ST, "lich-ca.log")) if "bat dau: T0=%d " % t0 in l) - 1
-    except OSError:
+        base_day = time.mktime(time.localtime(t0)[:3] + (0, 0, 0, 0, 0, -1))
+        for l in open(os.path.join(ST, "lich-ca.log")):
+            if "bat dau: T0=%d " % t0 not in l:
+                continue
+            restarts += 1
+            h, mi, se = (int(x) for x in l[:8].split(":"))
+            ts = base_day + h * 3600 + mi * 60 + se
+            if ts < t0 - 60:
+                ts += 86400                                   # qua nua dem
+            if restarts > 1 and t0 + at["R-B"] - 60 <= ts <= end + 60:
+                gap = True
+    except (OSError, ValueError):
         pass
-    out.append("LICH_CA_RESTARTS=%d" % max(0, restarts))
-    if time.time() >= t0 + at["R-B"] and peak < STORM_MIN_PEAK:
+    out.append("LICH_CA_RESTARTS=%d" % max(0, restarts - 1))
+    if gap:
         out.append("LIVE_GAP")
     return out
+
+
+def giu_cho():
+    """Gia tri giu cho cho MOI result GROUP cua goals.config: Labtainers LOI grader neu result thieu
+    (gap tren VM). 999999 khong bao gio trung bai lam (defender dung 999998 cho o bo trong)."""
+    X = 999999
+    for k in range(1, 14):
+        print("GT_INC_%d=%d GT_V_%d=%d GT_P_%d=%d GT_E_%d=%d GT_ISP1_%d=%d" % (k, X, k, X, k, X, k, X, k, X))
+    print("GT_SC_TK_C=%d GT_SC_HOST_C=%d GT_SC_HOSTIP_C=%d GT_SC_GIAI_DOAN=%d" % (X, X, X, X))
+    print("GT_SC_T1=%d GT_SC_T2=%d GT_SC_T3=%d GT_SC_T4=%d" % (X, X, X, X))
+    print("GT_SC_ASSET=%d GT_SC_STAGE=%d GT_SC_MITRE_C=%d GT_SC_IOC_C2=%d GT_SC_DE_XUAT_C=%d" % (X, X, X, X, X))
+
+
+CACHE = os.path.join(ST, "print.cache")
 
 
 def do_print(all_=False):
@@ -2477,6 +2540,8 @@ def do_print(all_=False):
     if "END" not in dn and not all_:
         # TRONG CA: khong in dap an / ket qua tap an (checkwork giua ca KHONG duoc thanh "may do dap an")
         print("SHIFT_RUNNING")
+        giu_cho()
+        print("PRINT_DONE")
         return
     # dap an theo thu tu PHAT (k = 1..n); cung thu tu ma defender in
     rel = sorted([(dn[e["id"]], e["inc"]) for e in plan["events"] if e["kind"] == "ticket" and e["id"] in dn])
@@ -2507,8 +2572,12 @@ def do_print(all_=False):
         print(txt.strip())
         if "RULES_SHA=%s" % rules_sha() not in txt:
             print("RULES_STALE")
-    for line in do_live():
-        print(line)
+    try:
+        for line in do_live():
+            print(line)
+    except Exception as e:  # noqa: BLE001
+        print("LIVE_ERROR=%s" % str(e)[:100].replace("\n", " "))
+    print("PRINT_DONE")          # prestop chi tin ban in co dong nay (khong bi cat giua chung)
 
 
 MAU_XML = """<group name="bai18,">
@@ -2570,6 +2639,23 @@ if __name__ == "__main__":
         do_mau(cmd == "mau-nap")
     elif cmd == "live":
         print("\n".join(do_live()))
+    elif cmd == "cached":
+        # prestop du phong (nhanh, khong indexer): ban in sau het ca do grade-bai18 luu; khong co -> giu cho
+        if os.path.exists(CACHE):
+            sys.stdout.write(open(CACHE).read())
+            print("FROM_CACHE")
+        else:
+            print("SIEM18_MARKER")
+            print("PRESTOP_FALLBACK")
+            giu_cho()
+    elif "--cache" in sys.argv:
+        # grade-bai18 (sau moi lan cham + sau het ca): luu ban in cho prestop du phong
+        import contextlib, io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            do_print()
+        if "SHIFT_END=Y" in buf.getvalue():
+            write_atomic(CACHE, buf.getvalue())
     else:
         do_print("--all" in sys.argv)          # --all: CHI phat trien (in ca khi chua het ca)
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
@@ -2586,7 +2672,7 @@ cat > "$LAB/siem/bai18/lich-ca.py" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
 #   - shift.json (khong dap an) cho shiftd/defender moi vong lap
 # Che do nhanh (phat trien): echo 0.1667 > /root/.bai18/scale  (1 ca = 15'). XOA truoc khi phat hanh.
 # ============================================================================
-import json, os, random, shutil, sys, time
+import json, os, subprocess, random, shutil, sys, time
 
 HERE = "/home/ubuntu/bai18"
 sys.path.insert(0, os.path.join(HERE, "lib"))
@@ -2750,6 +2836,8 @@ def handle(e, s, st, ix, t0, now, seed):
         release_request("R-B", "dev-rb.jsonl", YC_RB.format(gio=time.strftime("%H:%M"), han=han))
     elif k == "end":
         open(os.path.join(ST, "SHIFT_END"), "w").write("%d\n" % int(now))
+        # cham + luu ban in sau het ca (prestop du phong neu prestop qua 30s)
+        subprocess.run(["systemctl", "start", "--no-block", "grade-bai18.service"])
 
 
 if __name__ == "__main__":
@@ -5053,7 +5141,7 @@ def goals():
           "rb_quality = boolean : ( _siem_end and _rules_valid and _rb_p90 and _rb_r90 )",
           "c3_seen = boolean : ( _siem_end and _c3 )",
           "c5_seen = boolean : ( _siem_end and _c5 )",
-          "storm_contained = boolean : ( _siem_end and _rb_contain20 )",
+          "storm_contained = boolean : ( _siem_end and _rb_contain20 and _rb_not_blind )",
           "",
           "# --- sau ca ---",
           "ban_giao = boolean : ( _frozen and _bg_full )",
@@ -5065,6 +5153,111 @@ def main():
     open(os.path.join(OUT, "results.config"), "w").write(results())
     open(os.path.join(OUT, "goals.config"), "w").write(goals())
     print("Da sinh results.config + goals.config (%d ticket)" % NSLOT)
+
+
+if __name__ == "__main__":
+    main()
+__EOF_LAB_SOC_SHIFT_CAPSTONE__
+mkdir -p "$LAB/tools"
+cat > "$LAB/tools/p7-luat.py" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
+#!/usr/bin/env python3
+# ============================================================================
+# p7-luat.py - P7 nhom A (CHI phat trien): cham TAP AN cho cac bien the luat T5-T10 (lo trinh P7),
+# khong can chay ca. Chay ROOT tren siem:
+#   docker cp labs/soc-shift-capstone/tools/p7-luat.py <siem>:/home/ubuntu/bai18/
+#   docker exec <siem> python3 /home/ubuntu/bai18/p7-luat.py
+# Moi bien the: ghi local_rules.xml (tu giai mau cua SV nay) -> analysisd -t -> restart -> grade18 rules.
+# Cuoi cung NAP LAI giai mau. Lam SAU khi ca da het (lich su nap luat bi ghi them), roi reset-ca.
+# ============================================================================
+import os, re, subprocess, sys, time
+
+sys.path.insert(0, "/home/ubuntu/bai18")
+sys.path.insert(0, "/home/ubuntu/bai18/lib")
+import grade18 as g  # noqa: E402
+import socq.ca as ca  # noqa: E402
+
+ST = g.ST
+
+
+def world():
+    s = ca.build(int(open(os.path.join(ST, "seed")).read()), int(open(os.path.join(ST, "t_ref")).read()))
+    return s["world"], s["ctx"]
+
+
+def mau_xml(w, cx):
+    return g.MAU_XML % {"script": (w.upload_dir + w.approved_script).replace(".", "\\."), "svc": cx.svc_upload, "chg": cx.chg_backup}
+
+
+def sub_rule(xml, rid, new):
+    """Thay ca khoi <rule id="rid" ...>...</rule> (new='' -> xoa)."""
+    return re.sub(r'\s*<rule id="%s".*?</rule>' % rid, ("\n  " + new) if new else "", xml, flags=re.S)
+
+
+def variants(w, cx):
+    m = mau_xml(w, cx)
+    net = w.ip("web-shop").rsplit(".", 1)[0] + ".0/24"
+    ex = lambda cond: ('<rule id="100341" level="0">\n    <if_sid>100342</if_sid>\n    %s\n'  # noqa: E731
+                       '    <description>ngoai le (bien the P7)</description>\n  </rule>' % cond)
+    return [
+        ("T9  giai mau (ngoai le may sao luu VA cong)", m, {"RB_NOT_BLIND": True, "RA_R100": 100, "RB_R100": 100}),
+        ("T5a ha 100340 xuong level 3", m.replace('id="100340" level="10"', 'id="100340" level="3"'), {"RB_NOT_BLIND": False}),
+        ("T5b xoa luat 100340", sub_rule(m, "100340", ""), {"RB_NOT_BLIND": False}),
+        ("T6  nguong tan suat x10", m.replace('frequency="8"', 'frequency="80"'), {"RB_NOT_BLIND": False}),
+        ("T7  loai tru ca dai noi bo %s" % net, sub_rule(m, "100341", ex("<srcip>%s</srcip>" % net)), {"RB_NOT_BLIND": False}),
+        ("T8  loai tru theo cong 22", sub_rule(m, "100341", ex("<dstport>22</dstport>")), {"RB_NOT_BLIND": False}),
+        ("T10 R-A chi bat cmd=", m.replace('<url type="pcre2">^/uploads/[^?]*\\.(php|phtml|phar)\\?</url>',
+                                            '<url type="pcre2">[?&amp;]cmd=</url>'), {"RA_R100_MAX": 89}),
+    ]
+
+
+def load(xml):
+    open(g.RULES, "w").write(xml)
+    subprocess.run("chown wazuh:wazuh %s" % g.RULES, shell=True)
+    t = subprocess.run(["/var/ossec/bin/wazuh-analysisd", "-t"], capture_output=True, text=True)
+    if t.returncode != 0:
+        return "analysisd -t LOI: " + (t.stdout + t.stderr).strip()[-200:]
+    subprocess.run("/var/ossec/bin/wazuh-control restart >/dev/null 2>&1", shell=True)
+    return None
+
+
+def main():
+    if os.geteuid() != 0:
+        raise SystemExit("can root")
+    w, cx = world()
+    g.do_mau(True)                     # lists giai mau (sao-luu-hosts/ports) cho moi bien the
+    subprocess.run("systemctl stop grade-bai18.path", shell=True)   # khong cham chong khi doi file luat
+    bad = 0
+    try:
+        for name, xml, exp in variants(w, cx):
+            t0 = time.time()
+            err = load(xml)
+            if err:
+                print("%-48s %s" % (name, err))
+                bad += 1
+                continue
+            g.do_rules(0)
+            txt = open(os.path.join(ST, "rules.txt")).read()
+            kv = dict(re.findall(r"\b([A-Z0-9_]+)=(\S+)", txt))
+            got = {"RB_NOT_BLIND": "RB_NOT_BLIND" in txt}
+            errs = []
+            for k, v in exp.items():
+                if k == "RA_R100_MAX":
+                    if int(kv.get("RA_R100", 0)) > v:
+                        errs.append("RA_R100=%s (can <= %d)" % (kv.get("RA_R100"), v))
+                elif k == "RB_NOT_BLIND":
+                    if got[k] != v:
+                        errs.append("RB_NOT_BLIND=%s (can %s)" % (got[k], v))
+                elif int(kv.get(k, -1)) != v:
+                    errs.append("%s=%s (can %s)" % (k, kv.get(k), v))
+            bad += bool(errs)
+            print("%-48s RA P/R=%s/%s RB P/R=%s/%s %s  (%ds) %s" % (
+                name, kv.get("RA_P100"), kv.get("RA_R100"), kv.get("RB_P100"), kv.get("RB_R100"),
+                "NOT_BLIND" if got["RB_NOT_BLIND"] else "MU", time.time() - t0, ("LOI: " + "; ".join(errs)) if errs else "OK"))
+            sys.stdout.flush()
+    finally:
+        g.do_mau(True)                 # tra lai giai mau
+        subprocess.run("systemctl start grade-bai18.path", shell=True)
+    print("%d loi" % bad)
 
 
 if __name__ == "__main__":
@@ -5232,6 +5425,8 @@ def score(siem_txt, def_txt):
         r["rb_khoanh_vung"] = step(num(g, "RB_FIX_REL"), 5.0, 2.0, 20, 30)
     else:
         r["rb_khoanh_vung"] = step(num(g, "RB_CONTAIN_MIN"), 5.0, 2.0, 20, 30)
+    if "RB_NOT_BLIND" not in gf:
+        r["rb_khoanh_vung"] = 0.0          # "dap" bao bang cach lam mu luat khong phai khoanh vung
     # ---- chat luong luat (tap an)
     valid = g.get("RULES_VALID") == "Y"
     pr = lambda f: ((num(g, f + "_P100") or 0) + (num(g, f + "_R100") or 0)) / 200.0 if valid else 0.0  # noqa: E731
@@ -5331,7 +5526,14 @@ def crc(t):
 def siem_out(s, w, rules, live, ended=True):
     o = ["SIEM18_MARKER", "SHIFT_END=%s" % ("Y" if ended else "N")]
     if not ended:
-        return "\n".join(o + ["SHIFT_RUNNING"]) + "\n"
+        X = 999999
+        o.append("SHIFT_RUNNING")
+        for k in range(1, 14):
+            o.append("GT_INC_%d=%d GT_V_%d=%d GT_P_%d=%d GT_E_%d=%d GT_ISP1_%d=%d" % (k, X, k, X, k, X, k, X, k, X))
+        o += ["GT_SC_TK_C=%d GT_SC_HOST_C=%d GT_SC_HOSTIP_C=%d GT_SC_GIAI_DOAN=%d" % (X, X, X, X),
+              "GT_SC_T1=%d GT_SC_T2=%d GT_SC_T3=%d GT_SC_T4=%d" % (X, X, X, X),
+              "GT_SC_ASSET=%d GT_SC_STAGE=%d GT_SC_MITRE_C=%d GT_SC_IOC_C2=%d GT_SC_DE_XUAT_C=%d" % (X, X, X, X, X)]
+        return "\n".join(o) + "\n"
     tk = sorted((e["at"], e["inc"]) for e in s["events"] if e["kind"] == "ticket")
     for k, (_, inc) in enumerate(tk, 1):
         a = s["answers"][inc]
@@ -5355,16 +5557,21 @@ def def_out(s, w, ans, sc_fields, lt_fields, frozen=True, extra=()):
     tk = sorted((e["at"], e["inc"]) for e in s["events"] if e["kind"] == "ticket")
     for k, (_, inc) in enumerate(tk, 1):
         line = "INC_%d=%s" % (k, inc[4:])
+        NA = 999998
         if inc in ans:
             v, p, e, lat = ans[inc]
             line += " ANS_V_%d=%s ANS_P_%d=%s ANS_E_%d=%s FIRST_%d=%d LAT_%d=%d LATOK_%d=%d" % (
                 k, v, k, p, k, e, k, 2000, k, lat, k, 1 if lat <= 600 else 0)
+        else:
+            line += " ANS_V_%d=%d ANS_P_%d=%d ANS_E_%d=%d" % (k, NA, k, NA, k, NA)
         o.append(line)
     o += ["ANS_N=%d" % len(tk), "SCALE=1.0"]
     tks, host, gd = sc_fields
     o += ["ANS_SC_TICKETS=%s" % ",".join(map(str, sorted(tks))), "ANS_SC_TK_C=%d" % canon(tks),
-          "ANS_SC_HOST=%s" % host, "ANS_SC_HOST_C=%d" % crc(host), "ANS_SC_GIAI_DOAN=%s" % gd]
+          "ANS_SC_HOST=%s" % host, "ANS_SC_HOST_C=%d" % crc(host), "ANS_SC_GIAI_DOAN=%s" % (gd if gd != "" else 999998)]
     for k, v in lt_fields.items():
+        if k in ("TICKET", "ASSET_LEVEL", "STAGE", "IOC_C2") and v == "":
+            v = 999998
         o.append("LT_%s=%s" % (k, v))
         if k == "HOST":
             o.append("LT_HOST_C=%d" % crc(v))
@@ -5372,6 +5579,13 @@ def def_out(s, w, ans, sc_fields, lt_fields, frozen=True, extra=()):
             o.append("LT_%s_C=%d" % (k, canon(v.split(",") if v else [])))
     o += ["BAN_GIAO_FILLED=6", "KS_TRUOC=3 KS_SAU=4", "KIEM_THU_RUNS=4", "GOI_Y_USES=1"] + list(extra)
     return "\n".join(o) + "\n"
+
+
+def fallback(role):
+    """Chay that _bin/prestop o may khong co sudo/siem -> nhanh du phong (giu cho)."""
+    import subprocess
+    return subprocess.run(["bash", os.path.join(HERE, "..", role, "_bin", "prestop")], capture_output=True, text=True,
+                          cwd="/tmp").stdout
 
 
 # ------------------------------------------------------------------ mo phong Labtainers
@@ -5424,8 +5638,10 @@ def eval_goals(p, val):
                 raise SystemExit("answertag la: " + ln)
             if ref.startswith("result.") and ref[7:] not in RES_NAMES:
                 raise SystemExit("result khong ton tai: " + ln)
+            if lhs is None or rhs is None:       # Labtainers: result thieu -> loi grader (gap tren VM 26/11)
+                raise SystemExit("THIEU result cho goal %s (%s / %s) -> grader Labtainers se loi" % (name, parts[2], ref))
             try:
-                goals[name] = lhs is not None and rhs is not None and int(lhs) == int(rhs)
+                goals[name] = int(lhs) == int(rhs)
             except ValueError:
                 goals[name] = False
         elif parts[0] == "boolean":
@@ -5488,6 +5704,10 @@ def main():
          {"v_1": False, "gate_no_missed_p1": False, "gate_storm_not_blind": False, "sc1_tickets": False}, (0, 1)),
         ("T7 LIVE_GAP (stoplab giua bao)", siem_out(s, w, rules_ok, ["STORM_PEAK=1", "RB_CONTAIN_MIN=2", "LIVE_GAP", "RB_FIX_REL=1", "GATE_RA_DEPLOYED", "RA_DEPLOY_REL=9", "C3_SEEN"]),
          def_out(s, w, perfect, sc_ok, lt_ok), {"bai18_gates": True}, (95, 100)),
+        ("T8 prestop siem du phong", fallback("siem"), def_out(s, w, perfect, sc_ok, lt_ok),
+         {"bai18_gates": False, "v_1": False}, (0, 1)),
+        ("T9 prestop defender du phong", siem_out(s, w, rules_ok, live_ok), fallback("defender"),
+         {"bai18_gates": False, "v_1": False, "gate_storm_not_blind": True}, (25, 60)),
     ]
     goals_p = os.path.join(cfg, "goals.config")
     bad = 0

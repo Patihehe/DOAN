@@ -158,6 +158,8 @@ def score(siem_txt, def_txt):
         r["rb_khoanh_vung"] = step(num(g, "RB_FIX_REL"), 5.0, 2.0, 20, 30)
     else:
         r["rb_khoanh_vung"] = step(num(g, "RB_CONTAIN_MIN"), 5.0, 2.0, 20, 30)
+    if "RB_NOT_BLIND" not in gf:
+        r["rb_khoanh_vung"] = 0.0          # "dap" bao bang cach lam mu luat khong phai khoanh vung
     # ---- chat luong luat (tap an)
     valid = g.get("RULES_VALID") == "Y"
     pr = lambda f: ((num(g, f + "_P100") or 0) + (num(g, f + "_R100") or 0)) / 200.0 if valid else 0.0  # noqa: E731

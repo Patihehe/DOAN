@@ -30,7 +30,14 @@ def crc(t):
 def siem_out(s, w, rules, live, ended=True):
     o = ["SIEM18_MARKER", "SHIFT_END=%s" % ("Y" if ended else "N")]
     if not ended:
-        return "\n".join(o + ["SHIFT_RUNNING"]) + "\n"
+        X = 999999
+        o.append("SHIFT_RUNNING")
+        for k in range(1, 14):
+            o.append("GT_INC_%d=%d GT_V_%d=%d GT_P_%d=%d GT_E_%d=%d GT_ISP1_%d=%d" % (k, X, k, X, k, X, k, X, k, X))
+        o += ["GT_SC_TK_C=%d GT_SC_HOST_C=%d GT_SC_HOSTIP_C=%d GT_SC_GIAI_DOAN=%d" % (X, X, X, X),
+              "GT_SC_T1=%d GT_SC_T2=%d GT_SC_T3=%d GT_SC_T4=%d" % (X, X, X, X),
+              "GT_SC_ASSET=%d GT_SC_STAGE=%d GT_SC_MITRE_C=%d GT_SC_IOC_C2=%d GT_SC_DE_XUAT_C=%d" % (X, X, X, X, X)]
+        return "\n".join(o) + "\n"
     tk = sorted((e["at"], e["inc"]) for e in s["events"] if e["kind"] == "ticket")
     for k, (_, inc) in enumerate(tk, 1):
         a = s["answers"][inc]
@@ -54,16 +61,21 @@ def def_out(s, w, ans, sc_fields, lt_fields, frozen=True, extra=()):
     tk = sorted((e["at"], e["inc"]) for e in s["events"] if e["kind"] == "ticket")
     for k, (_, inc) in enumerate(tk, 1):
         line = "INC_%d=%s" % (k, inc[4:])
+        NA = 999998
         if inc in ans:
             v, p, e, lat = ans[inc]
             line += " ANS_V_%d=%s ANS_P_%d=%s ANS_E_%d=%s FIRST_%d=%d LAT_%d=%d LATOK_%d=%d" % (
                 k, v, k, p, k, e, k, 2000, k, lat, k, 1 if lat <= 600 else 0)
+        else:
+            line += " ANS_V_%d=%d ANS_P_%d=%d ANS_E_%d=%d" % (k, NA, k, NA, k, NA)
         o.append(line)
     o += ["ANS_N=%d" % len(tk), "SCALE=1.0"]
     tks, host, gd = sc_fields
     o += ["ANS_SC_TICKETS=%s" % ",".join(map(str, sorted(tks))), "ANS_SC_TK_C=%d" % canon(tks),
-          "ANS_SC_HOST=%s" % host, "ANS_SC_HOST_C=%d" % crc(host), "ANS_SC_GIAI_DOAN=%s" % gd]
+          "ANS_SC_HOST=%s" % host, "ANS_SC_HOST_C=%d" % crc(host), "ANS_SC_GIAI_DOAN=%s" % (gd if gd != "" else 999998)]
     for k, v in lt_fields.items():
+        if k in ("TICKET", "ASSET_LEVEL", "STAGE", "IOC_C2") and v == "":
+            v = 999998
         o.append("LT_%s=%s" % (k, v))
         if k == "HOST":
             o.append("LT_HOST_C=%d" % crc(v))
@@ -71,6 +83,13 @@ def def_out(s, w, ans, sc_fields, lt_fields, frozen=True, extra=()):
             o.append("LT_%s_C=%d" % (k, canon(v.split(",") if v else [])))
     o += ["BAN_GIAO_FILLED=6", "KS_TRUOC=3 KS_SAU=4", "KIEM_THU_RUNS=4", "GOI_Y_USES=1"] + list(extra)
     return "\n".join(o) + "\n"
+
+
+def fallback(role):
+    """Chay that _bin/prestop o may khong co sudo/siem -> nhanh du phong (giu cho)."""
+    import subprocess
+    return subprocess.run(["bash", os.path.join(HERE, "..", role, "_bin", "prestop")], capture_output=True, text=True,
+                          cwd="/tmp").stdout
 
 
 # ------------------------------------------------------------------ mo phong Labtainers
@@ -123,8 +142,10 @@ def eval_goals(p, val):
                 raise SystemExit("answertag la: " + ln)
             if ref.startswith("result.") and ref[7:] not in RES_NAMES:
                 raise SystemExit("result khong ton tai: " + ln)
+            if lhs is None or rhs is None:       # Labtainers: result thieu -> loi grader (gap tren VM 26/11)
+                raise SystemExit("THIEU result cho goal %s (%s / %s) -> grader Labtainers se loi" % (name, parts[2], ref))
             try:
-                goals[name] = lhs is not None and rhs is not None and int(lhs) == int(rhs)
+                goals[name] = int(lhs) == int(rhs)
             except ValueError:
                 goals[name] = False
         elif parts[0] == "boolean":
@@ -187,6 +208,10 @@ def main():
          {"v_1": False, "gate_no_missed_p1": False, "gate_storm_not_blind": False, "sc1_tickets": False}, (0, 1)),
         ("T7 LIVE_GAP (stoplab giua bao)", siem_out(s, w, rules_ok, ["STORM_PEAK=1", "RB_CONTAIN_MIN=2", "LIVE_GAP", "RB_FIX_REL=1", "GATE_RA_DEPLOYED", "RA_DEPLOY_REL=9", "C3_SEEN"]),
          def_out(s, w, perfect, sc_ok, lt_ok), {"bai18_gates": True}, (95, 100)),
+        ("T8 prestop siem du phong", fallback("siem"), def_out(s, w, perfect, sc_ok, lt_ok),
+         {"bai18_gates": False, "v_1": False}, (0, 1)),
+        ("T9 prestop defender du phong", siem_out(s, w, rules_ok, live_ok), fallback("defender"),
+         {"bai18_gates": False, "v_1": False, "gate_storm_not_blind": True}, (25, 60)),
     ]
     goals_p = os.path.join(cfg, "goals.config")
     bad = 0

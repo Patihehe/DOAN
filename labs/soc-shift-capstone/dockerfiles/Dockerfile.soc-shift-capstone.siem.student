@@ -42,7 +42,7 @@ RUN mkdir -p /srv/shiftd /etc/systemd/system/multi-user.target.wants \
    'PathChanged=/var/ossec/etc/rules/local_rules.xml' 'Unit=grade-bai18.service' '[Install]' 'WantedBy=multi-user.target' \
    > /etc/systemd/system/grade-bai18.path \
  && printf '%s\n' '[Unit]' 'Description=Bai 18 - phat lai tap an R-A/R-B' 'After=seed-bai18.service' '[Service]' 'Type=oneshot' \
-   'TimeoutStartSec=600' 'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 20' > /etc/systemd/system/grade-bai18.service \
+   'TimeoutStartSec=600' 'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 20' 'ExecStartPost=-/usr/bin/python3 /home/ubuntu/bai18/grade18.py print --cache' > /etc/systemd/system/grade-bai18.service \
  && for u in seed-bai18.service lich-ca.service shiftd.service grade-bai18.path; do \
       ln -sf /etc/systemd/system/$u /etc/systemd/system/multi-user.target.wants/$u; done
 #

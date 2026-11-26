@@ -1,12 +1,30 @@
 #!/bin/bash
-# prestop siem (Bai 18): dap an theo thu tu phat + ket qua cham luat (tap an) + so lieu luong that (alerts.json).
-# Luat doi ma chua cham lai (RULES_STALE) -> cham ngay (gioi han 24s vi prestop co timeout 30s).
+# prestop siem (Bai 18): dap an theo thu tu phat + ket qua cham luat (tap an) + so lieu luong that.
+# Labtainers cat prestop o ~30s; neu siem in thieu result, grader LOI ca bai (gap tren VM 27/11:
+# mau-nap ngay truoc checkwork -> cham lai chiem khoa -> "Timed out").
+#   1) in truc tiep, toi da 20s
+#   2) khong kip -> ban in sau het ca do grade-bai18 luu (FROM_CACHE)
+#   3) chua co ban luu -> gia tri giu cho (PRESTOP_FALLBACK): moi goal N nhung grader KHONG loi
+# Khong cham lai luat trong prestop nua: grade-bai18 tu cham khi file luat doi (1-2 phut).
 trap "echo Timed out; exit" SIGTERM
 ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
-OUT=$(sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>&1)
-if echo "$OUT" | grep -q RULES_STALE; then
-  timeout 24 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 0 >/dev/null 2>&1
-  OUT=$(sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>&1)
+OUT=$(timeout 20 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>/dev/null)
+if ! echo "$OUT" | grep -q "^PRINT_DONE" ; then
+  OUT=$(timeout 5 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py cached 2>/dev/null)
+fi
+if [ -z "$OUT" ]; then
+  OUT="SIEM18_MARKER
+PRESTOP_FALLBACK"
+  X=999999
+  for k in $(seq 1 13); do OUT="$OUT
+GT_INC_$k=$X GT_V_$k=$X GT_P_$k=$X GT_E_$k=$X GT_ISP1_$k=$X"; done
+  OUT="$OUT
+GT_SC_TK_C=$X GT_SC_HOST_C=$X GT_SC_HOSTIP_C=$X GT_SC_GIAI_DOAN=$X
+GT_SC_T1=$X GT_SC_T2=$X GT_SC_T3=$X GT_SC_T4=$X
+GT_SC_ASSET=$X GT_SC_STAGE=$X GT_SC_MITRE_C=$X GT_SC_IOC_C2=$X GT_SC_DE_XUAT_C=$X"
 fi
 echo "$OUT"
+if echo "$OUT" | grep -q RULES_STALE; then
+  echo "# Luat vua doi, siem dang cham lai - checkwork lai sau 1-2 phut."
+fi
 exit 0
