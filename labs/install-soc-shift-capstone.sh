@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# soc-shift-capstone - Bai 18: Ca truc mo phong (capstone) - P0-P7
+# soc-shift-capstone - Bai 18: Ca truc mo phong (capstone)
 # Chay tren VM:  bash install-soc-shift-capstone.sh ; roi rebuild soc-shift-capstone
 # (File sinh tu dong boi labs/_shared/make-install.py - sua ma nguon trong labs/soc-shift-capstone/ roi sinh lai.)
 # ============================================================================
@@ -267,8 +267,12 @@ fi
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/defender/_system"
 cat > "$LAB/defender/_system/README.txt" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
-Cay nay duoc Labtainers giai nen vao / cua defender LUC BUILD (quyen root) -> cho cong cu + watcher (D4: SV khong co root).
-P4: usr/local/bin/{kiem-thu-luat,thu-dong,goi-y,trang-thai}, usr/local/sbin/{bai18-watcher,bai18-thu-thap}, etc/systemd/system/bai18-watcher.service
+Cay nay duoc Labtainers giai nen vao / cua defender LUC BUILD (quyen root) -> cong cu + watcher (SV khong co root).
+  usr/local/bin/{kiem-thu-luat,thu-dong,goi-y,trang-thai}       cong cu SV (khong sudo)
+  usr/local/sbin/bai18-khoa-quyen   go ubuntu khoi nhom sudo sau khi Labtainers khoi tao xong (moi lan boot)
+  usr/local/sbin/bai18-watcher      root: nhac gio, chep yeu cau, ghi FIRST/EDIT, DONG BANG phieu luc het ca
+  usr/local/sbin/bai18-thu-thap     root (sudoers rieng): in phieu da dong bang cho prestop
+  etc/soc-tools/lab.json            cau hinh kiem-thu-luat (dai luat, list, tap phat trien)
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/defender/_system/etc/soc-tools"
 cat > "$LAB/defender/_system/etc/soc-tools/lab.json" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
@@ -2192,8 +2196,18 @@ exit 0
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/siem/bai18"
 cat > "$LAB/siem/bai18/README.txt" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
-P3: seed18.py, lich-ca.py, shiftd.py, grade18.py, families/, bai18_prod_rules.xml
-lib/ : ban chep labs/_shared/socq + soc-tools/{wzapi,replay}.py (chay labs/_shared/sync-soc-tools.sh soc-shift-capstone)
+Bai 18 - siem (/home/ubuntu/bai18). Moi thu chay ROOT qua systemd; SV khong co terminal tren siem.
+  seed18.py        seed-bai18.service (oneshot, 1 lan): Wazuh (localfile, list, luat san xuat + khung),
+                   user API soc-tool, ctx-*, nen, tap AN + tap phat trien, dat T0 (-> /root/.bai18/)
+  lich-ca.py       lich-ca.service: phat ticket/yeu cau/bao theo T0 (phat bu khi khoi dong lai),
+                   /srv/shiftd/{shift.json,yeu-cau/,chuan-bi.json,canh-bao.json} (khong dap an)
+  grade18.py       rules (grade-bai18.path: moi lan doi local_rules.xml) | print (prestop) | live
+                   | mau / mau-nap (giai mau - phat trien) | cached | print --cache | print --all (phat trien)
+  reset-ca.py      CHI PHAT TRIEN: bat dau lai ca khong rebuild (xem docs/bai18-trien-khai.md)
+  bai18_prod_rules.xml, local_rules_khung.xml   luat san xuat 100310-319 + khung SV (R-A 100330-339, R-B 100340-349)
+  lib/             ban chep labs/_shared/socq + soc-tools/{wzapi,replay}.py
+                   -> sua o labs/_shared roi: bash labs/_shared/sync-soc-tools.sh soc-shift-capstone --socq --system
+Che do nhanh (phat trien): echo 0.1667 > /root/.bai18/scale  (ca 15') roi reset-ca.py. Khong co file = ca 90'.
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/siem/bai18"
 cat > "$LAB/siem/bai18/bai18_prod_rules.xml" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
@@ -4986,6 +5000,26 @@ class World:
 
 def make(seed):
     return World(random.Random(seed))
+__EOF_LAB_SOC_SHIFT_CAPSTONE__
+mkdir -p "$LAB/tools"
+cat > "$LAB/tools/README.md" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'
+# Bài 18 — công cụ ngoài lab (giảng viên / phát triển)
+
+Thư mục này **không** được chép vào container.
+
+| File | Dùng khi nào |
+|---|---|
+| `gen-grading18.py` | Sinh lại `instr_config/results.config` + `goals.config` (13 ticket theo thứ tự phát). Sửa ở đây, không sửa tay file config. Sau đó sinh lại install script. |
+| `score-bai18.py` | **Giảng viên**: điểm tổng 100 (kịch bản mục 9.2), 3 cổng, 3 chỉ số đồ án, cột ghi chú. `python3 score-bai18.py <thư mục .lab \| file .lab \| 2 file prestop> [--csv out.csv] [-v]`. Đọc thẳng `.lab` của `checkwork` / `gradelab`. |
+| `test-grading18.py` | Kiểm config sinh ra + `score-bai18.py` trên 9 bài làm giả (mô phỏng ngữ nghĩa Labtainers, **báo lỗi khi thiếu result** như grader thật). Chạy sau mọi thay đổi phần chấm. |
+| `p7-luat.py` | Chép vào siem, chạy root: chấm tập ẩn cho 7 biến thể luật (T5–T10 của lộ trình). Chỉ dùng **sau** khi ca đã hết; tự nạp lại giải mẫu. |
+| `spike/` | Spike P1 (S-A/S-B/S-C) — tham khảo, không dùng khi chạy lab. |
+
+Kiểm nhanh trước khi commit:
+```bash
+cd labs/_shared && python3 -m socq.test_socq 500
+cd ../soc-shift-capstone && python3 tools/test-grading18.py
+```
 __EOF_LAB_SOC_SHIFT_CAPSTONE__
 mkdir -p "$LAB/tools"
 cat > "$LAB/tools/gen-grading18.py" <<'__EOF_LAB_SOC_SHIFT_CAPSTONE__'

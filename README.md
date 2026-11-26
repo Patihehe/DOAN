@@ -51,6 +51,8 @@ Mỗi bước phải **chạy được + chấm điểm được** trước khi 
 
 **Hybrid — "Patch & Pwn"** (50% phòng thủ + 50% tấn công có kiểm soát)  ✅ `soc-patch-pwn` (NoteBox: UNION SQLi + Stored XSS)
 
+**Capstone — Ca trực mô phỏng** (triage + gom sự cố + viết luật khẩn dưới áp lực thời gian)  ✅ `soc-shift-capstone` (Bài 18, xem [docs/bai18-trien-khai.md](docs/bai18-trien-khai.md))
+
 ## Cấu trúc thư mục
 
 ```
@@ -63,6 +65,8 @@ THI_DOAN/
 │   ├── soc-threathunt/        # Reverse shell + threat hunting
 │   ├── soc-privesc/           # Leo thang dac quyen + IR
 │   ├── soc-patch-pwn/         # Hybrid "Patch & Pwn" (NoteBox)
+│   ├── soc-shift-capstone/    # Bài 18 - Ca trực mô phỏng (capstone)
+│   ├── _shared/               # Thư viện + công cụ dùng chung (socq, soc-tools, make-install.py)
 │   ├── make-soc-wazuh.sh      # Dựng ảnh nền Wazuh dùng chung
 │   ├── apply-shared-siem*.sh  # Chuyển siem sang ảnh chung
 │   └── optimize-disk.sh       # Dọn dung lượng VM

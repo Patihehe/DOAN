@@ -50,6 +50,7 @@ soc-sqli-waf        (SQLi + WAF/ModSecurity)                    đã xong
 soc-threathunt      (reverse shell + threat hunting)            đã xong
 soc-privesc         (leo thang dac quyen + dieu tra IR)         đã xong
 soc-patch-pwn       (Hybrid NoteBox: UNION SQLi + Stored XSS)   đã xong
+soc-shift-capstone  (Bài 18 - ca trực mô phỏng, siem+defender)  đã xong
 ```
 Tất cả dùng chung `siem` (Wazuh) + `defender` + khung chấm điểm; chỉ khác `attacker`/`target`.
 `siem` nay dùng chung **ảnh nền `soc-wazuh`** (chạy `apply-shared-siem.sh` cho lab mới —
