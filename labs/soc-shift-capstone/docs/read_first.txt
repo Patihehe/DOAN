@@ -1,0 +1,109 @@
+================================================================================
+ SOC LAB - BAI 18: CA TRUC MO PHONG (CAPSTONE) (soc-shift-capstone)
+================================================================================
+
+1. TONG QUAN (OVERVIEW)
+--------------------------------------------------------------------------------
+Dem nay ban la analyst Tier 1 DUY NHAT cua SOC Cong ty X trong mot ca truc 90 phut.
+Khong ai giao tung bai nho: viec den theo thoi gian thuc, dan xen nhau, va ban phai tu
+quyet dinh lam gi truoc, lam gi sau - dung nhu mot ca truc that.
+
+Trong ca se co:
+  - hang doi ticket den theo nhieu dot (moi ticket can verdict, uu tien, bang chung);
+  - mot so ticket la CAC BUOC cua cung mot chuoi tan cong, rai rac theo thoi gian;
+  - yeu cau luat khan tu doi IR (co han chot);
+  - mot dot "bao" canh bao lam ngap dashboard.
+Het ca, phieu cua ban DONG BANG va ban viet ban giao cho ca sau.
+
+Bai nay tong hop Bai 14-17: triage theo SOP, pivot ngu canh, gom su co + leo thang,
+viet/tinh chinh luat Wazuh co kiem chung. Moi sinh vien co so ticket, may, IP, tai
+khoan, gio phat va tap kiem tra luat KHAC NHAU.
+
+2. MUC TIEU HOC TAP (OBJECTIVES)
+--------------------------------------------------------------------------------
+Sau bai nay, ban co the:
+  - Van hanh mot ca truc theo SOP: xep thu tu uu tien giua cac LOAI viec dang dien ra.
+  - Triage dung va du nhanh duoi ap luc thoi gian (verdict, uu tien, bang chung).
+  - Nhan ra cac ticket roi rac thuoc cung mot chuoi tan cong, gom thanh su co, leo thang.
+  - Trien khai luat khan "du tot" dung han, roi tinh chinh.
+  - Xu ly bao canh bao ma KHONG lam mu SIEM (ngoai le co can cu, khong tat luat).
+  - Viet ban giao ca cho nguoi khong o trong ca.
+
+3. KIEN THUC NEN (BACKGROUND)
+--------------------------------------------------------------------------------
+* SOP ca truc (~/SOP-ca-truc.txt) la "luat choi" cua bai: muc tieu thoi gian, thu tu uu
+  tien giua cac loai viec, dinh nghia verdict, ma tran uu tien, dinh dang moi phieu.
+  DOC KY TRUOC KHI CA BAT DAU.
+* Mot su co that hiem khi nam trong MOT ticket. Ghep cac ticket theo may, IP, thoi gian
+  va loai hanh vi; ticket giong mot buoc cua chuoi nhung o may khac, khong lien he
+  -> khong gom.
+* Bao canh bao: vua ngap dashboard, vua co the CHE mot tan cong that. Ngoai le phai hep
+  (dung may nguon VA dung hanh vi) va co can cu (phieu thay doi, dich vu da duyet).
+* Wazuh: luat con level 0 lam ngoai le, CDB list (lookup), luat tan suat, pcre2, MITRE.
+* "Du tot truoc, hoan hao sau": mot luat bat duoc phan lon trong han tot hon luat hoan
+  hao tre han.
+
+4. MOI TRUONG (TOPOLOGY)
+--------------------------------------------------------------------------------
+  siem     (172.20.0.20, AN)  Wazuh + lich ca truc. Ban KHONG co terminal tren may nay.
+  defender (172.20.0.30)      tram cua ban: Firefox + terminal. Ban KHONG co quyen root.
+
+  Dashboard:  https://172.20.0.20  -  tai khoan admin
+              mat khau: chay   cat /etc/soc-tools/dashboard.txt   tren defender
+  Hang doi :  Discover, index wazuh-alerts-*, truy van  data.ticket:*
+              (dat khung thoi gian du rong, bat auto-refresh 30s suot ca)
+  Ngu canh :  index pattern ctx-*  (tai san, dich vu da duyet, phieu thay doi, nhan su)
+  MAY cua mot su kien = truong predecoder.hostname (agent luon la "siem").
+
+5. CONG CU TREN DEFENDER
+--------------------------------------------------------------------------------
+  trang-thai               tinh hinh ca: phut thu may, ticket nao chua co dong phieu,
+                           yeu cau dang mo + han, so luat trong file. KHONG cho biet dung/sai.
+  kiem-thu-luat            nap ~/luat/local_rules.xml + ~/luat/lists/* vao Wazuh,
+                           phat lai tap phat trien kem yeu cau, in precision/recall.
+                           Luat dang nap sau lan chay CUOI chinh la bai nop.
+  thu-dong "<dong log>"    chay 1 dong log qua Wazuh voi luat dang nap (decoder, truong, luat no).
+  goi-y <muc>              goi y 3 cap (co ghi nhat ky so lan dung).
+
+6. TIEN TRINH (BEFORE / DURING / AFTER)
+--------------------------------------------------------------------------------
+TRUOC CA (sau khi mo lab, siem can ~5-10 phut de chuan bi; trang-thai cho biet tien do):
+  1) cat /etc/soc-tools/dashboard.txt ; mo dashboard, tao san tim kiem data.ticket:*
+  2) Doc ~/SOP-ca-truc.txt va ~/ban-giao-ca-truoc.txt.
+  3) Viet ~/ke-hoach.txt (ban se chia thoi gian the nao), dien TRUOC= trong ~/khao-sat.txt.
+  Ca TU BAT DAU khi siem san sang - terminal se bao "Ca truc da bat dau".
+
+TRONG CA (90 phut):
+  - Moi ticket: 1 dong trong ~/triage.txt  INC-xxx=<V>,<P>,<E>   (SOP muc 5-8).
+    Ghi lai dong de sua - dong CUOI cua moi ticket duoc tinh. Gio ghi dong DAU duoc do.
+  - Su co (nhieu ticket cung chuoi): ~/su-co.txt  (SOP muc 9).
+  - Su co co P1: ghi chu leo thang ~/leo-thang/SC<n>.txt, CAP NHAT khi chuoi co buoc moi
+    (SOP muc 10).
+  - Yeu cau tu IR xuat hien trong ~/yeu-cau/<ten>/ (terminal se nhac): doc yeu-cau.txt,
+    sua ~/luat/local_rules.xml (+ ~/luat/lists/), kiem bang thu-dong, nap bang kiem-thu-luat.
+  - Nhac gio hien o lenh ke tiep trong terminal; go trang-thai bat cu luc nao.
+
+SAU CA (phieu triage / su co / leo thang DA DONG BANG - sua them khong duoc tinh):
+  - ~/ban-giao.txt  (SOP muc 12)   - ~/phan-tu.txt (tu nhin lai ca truc)
+  - dien SAU= trong ~/khao-sat.txt - roi checkwork.
+
+7. CHAM DIEM (TOM TAT)
+--------------------------------------------------------------------------------
+  Ba cong BAT BUOC (truot 1 cong = khong dat, du diem cao):
+    - Khong bo sot ticket P1 nao (phai ghi dung verdict + uu tien truoc khi het ca).
+    - Luat bao canh bao KHONG bi mu (van bat duoc tan cong that cung loai).
+    - Yeu cau luat khan cua IR duoc trien khai truoc khi het ca.
+  Diem tong 100: chinh xac (40) + thoi gian (30) + chat luong luat tren tap kiem tra AN (30).
+  Dat bai = 3 cong + diem >= 60.
+  checkwork TRUOC khi het ca: moi muc deu N (chua co gi de cham) - do la binh thuong.
+
+8. LUU Y QUAN TRONG
+--------------------------------------------------------------------------------
+  * KHONG dung lab (stoplab) giua ca. Ca van tinh gio khi lab tat; luong log/bao trong luc
+    tat bi mat, ticket se phat bu khi mo lai nhung ban mat thoi gian.
+  * Neu terminal bao "Mat lien lac voi siem": doi 2-3 phut, ca van tinh gio.
+  * Neu trang-thai bao "siem LOI: dia day": bao giang vien ngay.
+  * Chi ghi file trong thu muc nha; dung dinh dang KEY=gia_tri dung nhu khung san
+    (gia tri la SO khi SOP yeu cau so).
+  * Tap kiem tra AN cua luat khac tap phat trien: dung "hoc thuoc" tap phat trien.
+================================================================================

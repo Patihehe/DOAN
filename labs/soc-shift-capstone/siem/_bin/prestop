@@ -1,0 +1,12 @@
+#!/bin/bash
+# prestop siem (Bai 18): dap an theo thu tu phat + ket qua cham luat (tap an) + so lieu luong that (alerts.json).
+# Luat doi ma chua cham lai (RULES_STALE) -> cham ngay (gioi han 24s vi prestop co timeout 30s).
+trap "echo Timed out; exit" SIGTERM
+ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
+OUT=$(sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>&1)
+if echo "$OUT" | grep -q RULES_STALE; then
+  timeout 24 sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 0 >/dev/null 2>&1
+  OUT=$(sudo -n /usr/bin/python3 /home/ubuntu/bai18/grade18.py print 2>&1)
+fi
+echo "$OUT"
+exit 0

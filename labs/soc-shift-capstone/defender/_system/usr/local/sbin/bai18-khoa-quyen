@@ -1,0 +1,39 @@
+#!/bin/bash
+# bai18-khoa-quyen (root, systemd) - D4: SV KHONG co root tren defender.
+# Anh nen labtainer.firefox3 cho user ubuntu vao nhom sudo, ma /etc/sudoers co '%sudo ALL=(ALL) NOPASSWD:ALL'.
+# Labtainers CAN sudo luc khoi dong (parameterize.sh: chown, ParameterParser, fixlocal, hookBash...)
+# -> chi khoa SAU KHI parameterize xong: no tao /var/labtainer/did_param o buoc cuoi.
+# Sau khi khoa, ubuntu chi con /etc/sudoers.d/soc-tools (kiem-thu-luat, goi-y, bai18-thu-thap).
+# Hook bash cua Labtainers (bash-pre-capinout.sh) chi DOC chu 'sudo' trong lenh, khong goi sudo -> khong anh huong.
+LOG=/var/lib/soc-shift/khoa-quyen.log
+mkdir -p /var/lib/soc-shift && chmod 700 /var/lib/soc-shift
+for i in $(seq 1 360); do                       # toi da 30 phut
+  [ -d /var/labtainer/did_param ] && break
+  sleep 5
+done
+if [ ! -d /var/labtainer/did_param ]; then
+  echo "$(date '+%F %T') CHUA thay /var/labtainer/did_param sau 30 phut - KHONG khoa" >> $LOG
+  exit 1
+fi
+sleep 5                                          # parameterize con vai lenh sau mkdir did_param
+for g in sudo wheel admin; do
+  getent group $g >/dev/null && gpasswd -d ubuntu $g >/dev/null 2>&1
+done
+# Terminal mo TRUOC khi khoa van giu nhom 'sudo' trong tien trinh (sudo xet nhom cua tien trinh goi)
+# -> them quy tac TU CHOI theo TEN user. sudoers: quy tac khop CUOI CUNG thang, file .d doc sau /etc/sudoers
+# va theo thu tu ten -> 'zz-' dung cuoi; dong cong cu dat SAU '!ALL' nen van duoc phep.
+TOOLS="/usr/local/sbin/bai18-thu-thap"
+printf 'ubuntu ALL=(ALL) !ALL\nubuntu ALL=(root) NOPASSWD: %s\n' "$TOOLS" > /etc/sudoers.d/zz-bai18-khoa.tmp
+chmod 440 /etc/sudoers.d/zz-bai18-khoa.tmp
+if visudo -cf /etc/sudoers.d/zz-bai18-khoa.tmp >/dev/null; then
+  mv /etc/sudoers.d/zz-bai18-khoa.tmp /etc/sudoers.d/zz-bai18-khoa
+else
+  rm -f /etc/sudoers.d/zz-bai18-khoa.tmp
+  echo "$(date '+%F %T') LOI cu phap sudoers - chi go nhom" >> $LOG
+fi
+if sudo -u ubuntu sudo -n true 2>/dev/null; then
+  echo "$(date '+%F %T') LOI: ubuntu VAN sudo duoc toan quyen" >> $LOG
+  exit 1
+fi
+echo "$(date '+%F %T') da khoa quyen: $(id ubuntu)" >> $LOG
+touch /var/lib/soc-shift/khoa-quyen.done

@@ -1,0 +1,8 @@
+#!/bin/bash
+# prestop defender (Bai 18) - KHUNG P0. P4: goi 'sudo -n /usr/local/sbin/bai18-thu-thap' (root) de in
+# phieu DA DONG BANG + nhat ky watcher (moc lan dau ghi tung INC), nhat ky kiem-thu-luat / goi-y, khao sat.
+trap "echo Timed out; exit" SIGTERM
+ls -t /home/ubuntu/.local/result/prestop.stdout.* 2>/dev/null | tail -n +2 | xargs -r rm -f 2>/dev/null
+echo "DEFENDER18_MARKER"
+sudo -n /usr/local/sbin/bai18-thu-thap 2>/dev/null
+exit 0

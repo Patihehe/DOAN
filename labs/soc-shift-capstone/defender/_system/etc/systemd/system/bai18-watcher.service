@@ -1,0 +1,11 @@
+[Unit]
+Description=Bai 18 - watcher ca truc (moc thoi gian, yeu cau, dong bang phieu)
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/sbin/bai18-watcher
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

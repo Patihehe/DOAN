@@ -1,0 +1,7 @@
+# BAN GIAO CA (SOP muc 12) - viet SAU khi het ca, cho nguoi KHONG o trong ca
+SU_CO_DANG_MO=        # so luong su co chua dong
+SC_CHINH=             # ten su co chinh (vd SC1) va may trung tam
+LUAT_DA_THAY_DOI=     # dai ID cac luat ban da them/sua trong ca
+TICKET_CHUA_XU_LY=    # cac ticket chua co dong trong triage.txt (neu co)
+RUI_RO_CHO_CA_SAU=    # 2-3 cau: dieu ca sau phai theo doi ngay
+VIEC_CAN_QUYET=       # 1-2 cau: quyet dinh can truong ca / IR dua ra

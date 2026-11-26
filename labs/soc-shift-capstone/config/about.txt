@@ -1,0 +1,4 @@
+SOC Lab - Bai 18: Ca truc mo phong (capstone).
+Ca dem 90 phut mot minh: hang doi ticket den theo thoi gian thuc, mot chien dich tan cong web-shop
+rai qua nhieu ticket, mot yeu cau luat khan cua IR va mot bao canh bao che giau tan cong.
+Cham theo chinh xac + thoi gian + chat luong luat, ket thuc bang ban giao ca.

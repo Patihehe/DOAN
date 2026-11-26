@@ -1,0 +1,9 @@
+{
+  "rules_file": "luat/local_rules.xml",
+  "lists_dir": "luat/lists",
+  "lists": ["sao-luu-hosts", "sao-luu-ports"],
+  "dev_set": "yeu-cau/R-A/dev.jsonl",
+  "dev_sets": ["yeu-cau/R-A/dev.jsonl", "yeu-cau/R-B/dev.jsonl"],
+  "ranges": "ra=100330-100339,rb=100340-100349",
+  "goiy": "bai18"
+}

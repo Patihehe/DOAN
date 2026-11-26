@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+# ============================================================================
+# bai18-watcher (root, systemd bai18-watcher.service) - defender Bai 18.
+#  - doc http://172.20.0.20:8088/shift.json moi 5 s (shiftd tren siem; KHONG co dap an)
+#  - yeu cau R-A / R-B xuat hien -> chep vao ~/yeu-cau/<R>/ + nhac tren terminal
+#  - truoc T0: nhac 'siem dang chuan bi'; nhac gio 60/80/90 phut (theo do dai ca that) (~/.ca-truc-nhac)
+#  - T0 doi (reset-ca tren siem, chi phat trien): cat phieu cu vao ~/.ca-cu/, tra ban goc, bo dong bang
+#  - ghi LAN DAU moi dong INC-xxx= trong ~/triage.txt va moi lan sua su-co / leo-thang
+#    -> /var/lib/soc-shift/log (root 600; SV khong sua duoc) - dung tinh MTTA
+#  - het ca -> chup triage.txt, su-co.txt, leo-thang/ vao /var/lib/soc-shift/frozen/ (root, 444)
+# ============================================================================
+import hashlib, json, os, pwd, re, shutil, time, urllib.request
+
+SIEM = os.environ.get("BAI18_SIEM", "http://172.20.0.20:8088")    # bien moi truong: chi de thu nghiem
+H = pwd.getpwnam(os.environ.get("BAI18_USER", "ubuntu"))
+HOME = os.environ.get("BAI18_HOME", H.pw_dir)
+VAR = os.environ.get("BAI18_VAR", "/var/lib/soc-shift")
+LOG = os.path.join(VAR, "log")
+FROZEN = os.path.join(VAR, "frozen")
+NHAC = os.path.join(HOME, ".ca-truc-nhac")
+CACHE = os.environ.get("BAI18_CACHE", "/var/tmp/bai18-shift.json")
+RE_INC = re.compile(r"^\s*INC-(\d+)\s*=\s*(\S.*?)\s*(#.*)?$")
+GOC = os.path.join(VAR, "goc")             # ban goc file phieu (chup truoc T0) - chi dung khi reset-ca (phat trien)
+PHIEU = ("triage.txt", "su-co.txt", "leo-thang", "luat")
+
+
+def msg(k, sh):
+    """Nhac gio theo DO DAI CA THAT (che do nhanh: ca ngan hon 90')."""
+    dur = max(1, ((sh.get("end") or 0) - (sh.get("t0") or 0)) / 60.0) if sh.get("end") else 90.0
+    if k == "NHAC_60":
+        return "Da %d phut. Con %d phut - kiem tra hang doi va ghi chu leo thang." % (round(dur * 60 / 90), round(dur * 30 / 90))
+    if k == "NHAC_80":
+        return "Con %d phut. Hoan tat phieu; sau ca con ban giao." % max(1, round(dur * 10 / 90))
+    if k == "NHAC_90":
+        return "HET CA. triage.txt / su-co.txt / leo-thang/ DA DONG BANG. Viet ban-giao.txt, phan-tu.txt, khao-sat (SAU=)."
+    return None
+
+
+def get(path, raw=False):
+    with urllib.request.urlopen(SIEM + path, timeout=4) as r:
+        b = r.read()
+    return b if raw else json.loads(b.decode())
+
+
+def log(line):
+    with open(LOG, "a") as f:
+        f.write("%d %s\n" % (int(time.time()), line))
+
+
+def nhac(text):
+    with open(NHAC, "a") as f:
+        f.write("[%s] %s\n" % (time.strftime("%H:%M"), text))
+    os.chown(NHAC, H.pw_uid, H.pw_gid)
+
+
+def own(path):
+    for root, dirs, files in os.walk(path):
+        for n in dirs + files:
+            os.chown(os.path.join(root, n), H.pw_uid, H.pw_gid)
+    os.chown(path, H.pw_uid, H.pw_gid)
+
+
+def state():
+    st = {"released": [], "first": {}, "val": {}, "mt": {}, "frozen": False}
+    p = os.path.join(VAR, "watcher.json")
+    if os.path.exists(p):
+        try:
+            st.update(json.load(open(p)))
+        except ValueError:
+            pass
+    return st
+
+
+def save(st):
+    p = os.path.join(VAR, "watcher.json")
+    open(p + ".tmp", "w").write(json.dumps(st))
+    os.replace(p + ".tmp", p)
+
+
+def scan_triage(st):
+    p = os.path.join(HOME, "triage.txt")
+    try:
+        lines = open(p, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return
+    last = {}
+    for ln in lines:                      # dong CUOI cung cua moi INC la gia tri hien hanh
+        m = RE_INC.match(ln)
+        if m:
+            last[m.group(1)] = m.group(2)
+    for inc, val in last.items():
+        if inc not in st["first"]:
+            st["first"][inc] = int(time.time())
+            log("FIRST INC-%s %s" % (inc, val))
+        if st["val"].get(inc) != val:
+            st["val"][inc] = val
+            log("SET INC-%s %s" % (inc, val))
+
+
+def scan_files(st):
+    paths = [os.path.join(HOME, "su-co.txt")]
+    d = os.path.join(HOME, "leo-thang")
+    if os.path.isdir(d):
+        paths += [os.path.join(d, n) for n in sorted(os.listdir(d)) if n.endswith(".txt")]
+    for p in paths:
+        try:
+            h = hashlib.sha1(open(p, "rb").read()).hexdigest()[:10]
+        except OSError:
+            continue
+        if st["mt"].get(p) != h:
+            if p in st["mt"]:
+                log("EDIT %s %s" % (os.path.relpath(p, HOME), h))
+            st["mt"][p] = h
+
+
+def freeze(st):
+    os.makedirs(FROZEN, exist_ok=True)
+    for n in ("triage.txt", "su-co.txt"):
+        p = os.path.join(HOME, n)
+        if os.path.isfile(p):
+            shutil.copy(p, os.path.join(FROZEN, n))
+    d = os.path.join(HOME, "leo-thang")
+    if os.path.isdir(d):
+        shutil.copytree(d, os.path.join(FROZEN, "leo-thang"), dirs_exist_ok=True)
+    for root, dirs, files in os.walk(FROZEN):
+        for n in files:
+            os.chmod(os.path.join(root, n), 0o444)
+    st["frozen"] = int(time.time())
+    log("FROZEN")
+
+
+def chup_goc():
+    """Lan dau (truoc T0): giu ban goc file phieu de reset-ca (phat trien) dua defender ve dau ca."""
+    if os.path.isdir(GOC):
+        return
+    os.makedirs(GOC)
+    for n in PHIEU:
+        p = os.path.join(HOME, n)
+        if os.path.isdir(p):
+            shutil.copytree(p, os.path.join(GOC, n))
+        elif os.path.isfile(p):
+            shutil.copy2(p, os.path.join(GOC, n))
+
+
+def lam_moi(old):
+    """siem chay reset-ca (T0 doi): cat phieu ca cu vao ~/.ca-cu/<T0 cu>/, tra ban goc, bo dong bang."""
+    bk = os.path.join(HOME, ".ca-cu", str(old))
+    os.makedirs(bk, exist_ok=True)
+    co_goc = os.path.isdir(GOC)            # container cu (chua chup goc): chi SAO LUU, giu nguyen phieu
+    for n in PHIEU + ("yeu-cau",):
+        p = os.path.join(HOME, n)
+        if not co_goc and n != "yeu-cau":
+            if os.path.isdir(p):
+                shutil.copytree(p, os.path.join(bk, n), dirs_exist_ok=True)
+            elif os.path.isfile(p):
+                shutil.copy2(p, os.path.join(bk, n))
+            continue
+        if os.path.exists(p):
+            shutil.move(p, os.path.join(bk, n))
+        g = os.path.join(GOC, n)
+        if os.path.isdir(g):
+            shutil.copytree(g, p)
+        elif os.path.isfile(g):
+            shutil.copy2(g, p)
+        if os.path.exists(p):
+            own(p) if os.path.isdir(p) else os.chown(p, H.pw_uid, H.pw_gid)
+    os.makedirs(os.path.join(HOME, "yeu-cau"), exist_ok=True)
+    own(os.path.join(HOME, ".ca-cu"))
+    shutil.rmtree(FROZEN, ignore_errors=True)
+    if os.path.exists(LOG):
+        os.replace(LOG, LOG + "." + str(old))
+    nhac("(PHAT TRIEN) reset-ca: phieu ca cu -> ~/.ca-cu/%s/ ; bat dau ca moi." % old)
+
+
+def main():
+    os.makedirs(VAR, exist_ok=True)
+    os.chmod(VAR, 0o700)
+    st = state()
+    cho = False
+    while True:
+        try:
+            sh = get("/shift.json")
+        except Exception:  # noqa: BLE001
+            sh = {}
+        if not sh.get("t0"):
+            if not st.get("t0"):
+                chup_goc()
+                if not cho:
+                    cho = True
+                    nhac("siem dang chuan bi (Wazuh + du lieu ca, ~5-10 phut). Trong luc cho: doc ~/SOP-ca-truc.txt, "
+                         "~/ban-giao-ca-truoc.txt, viet ~/ke-hoach.txt. Xem tien do: trang-thai")
+            time.sleep(5)
+            continue
+        try:                                                 # ban cuoi cho trang-thai khi mat lien lac siem
+            open(CACHE + ".tmp", "w").write(json.dumps(sh))
+            os.chmod(CACHE + ".tmp", 0o644)
+            os.replace(CACHE + ".tmp", CACHE)
+        except OSError:
+            pass
+        if st.get("t0") and sh["t0"] != st["t0"]:          # reset-ca tren siem (chi khi phat trien)
+            lam_moi(st["t0"])
+            st = {"released": [], "first": {}, "val": {}, "mt": {}, "frozen": False}
+        if sh.get("t0") and not st.get("t0"):
+            st["t0"] = sh["t0"]
+            log("T0 %d" % sh["t0"])
+            nhac("Ca truc da bat dau. Hang doi tren dashboard (data.ticket:*). SOP: ~/SOP-ca-truc.txt")
+        for k in sorted(sh.get("released", {})):
+            if k in st["released"]:
+                continue
+            if k in ("R-A", "R-B"):
+                try:
+                    d = os.path.join(HOME, "yeu-cau", k)
+                    os.makedirs(d, exist_ok=True)
+                    for n in ("yeu-cau.txt", "dev.jsonl"):
+                        open(os.path.join(d, n), "wb").write(get("/yeu-cau/%s/%s" % (k, n), raw=True))
+                    own(os.path.join(HOME, "yeu-cau"))
+                    nhac("YEU CAU MOI: ~/yeu-cau/%s/yeu-cau.txt" % k)
+                    log("RELEASE %s" % k)
+                except Exception:  # noqa: BLE001
+                    continue          # thu lai vong sau
+            elif msg(k, sh):
+                nhac(msg(k, sh))
+            st["released"].append(k)
+        if not st.get("frozen"):
+            scan_triage(st)
+            scan_files(st)
+            if sh.get("end") and time.time() >= sh["end"]:
+                scan_triage(st)
+                freeze(st)
+        save(st)
+        time.sleep(5)
+
+
+if __name__ == "__main__":
+    main()

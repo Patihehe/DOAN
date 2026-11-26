@@ -1,0 +1,12 @@
+[Unit]
+Description=Bai 18 - go quyen root cua SV tren defender sau khi Labtainers khoi tao xong
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=2000
+ExecStart=/usr/local/sbin/bai18-khoa-quyen
+
+[Install]
+WantedBy=multi-user.target

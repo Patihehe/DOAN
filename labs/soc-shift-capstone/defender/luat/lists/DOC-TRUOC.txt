@@ -1,0 +1,7 @@
+CDB list cho ngoai le R-B (kiem-thu-luat nap ca 2 file len Wazuh):
+  sao-luu-hosts : moi dong 1 IP may nguon,  dang   10.1.2.3:
+  sao-luu-ports : moi dong 1 cong,          dang   9102:
+Dung trong luat:
+  <list field="srcip" lookup="address_match_key">etc/lists/sao-luu-hosts</list>
+  <list field="dstport" lookup="match_key">etc/lists/sao-luu-ports</list>
+Chi dua vao list nhung gi CO CAN CU (phieu thay doi trong ctx-changes). File rong cung duoc.

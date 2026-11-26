@@ -1,0 +1,67 @@
+#
+# Labtainer Dockerfile - defender (tram analyst, co Firefox xem dashboard Wazuh)
+#
+ARG registry
+# firefox3 = Firefox moi (tren network3) - chay duoc dashboard Wazuh hien dai
+FROM $registry/labtainer.firefox3
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+# === Dong bo mui gio voi VM (ICT = UTC+7). Doi TZ neu VM dung mui gio khac ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# Firefox co san trong base firefox3; them ssh client de SSH sang target xu ly su co
+# Bai 18: python3 cho watcher + kiem-thu-luat / thu-dong / goi-y / trang-thai (thu vien chuan)
+RUN apt-get update || true; apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+#
+# Mat khau dashboard: moi thanh vien dung anh soc-wazuh rieng -> mat khau khac nhau.
+# Lay tu CHINH anh nen ma siem dung (cung tag voi FROM cua siem) -> luon khop khi rebuild lab.
+COPY --from=localhost:5000/soc-wazuh:latest /root/wazuh-admin-credentials.txt /tmp/wz-cred.txt
+RUN mkdir -p /etc/soc-tools \
+ && P=$(sed -n "s/^ *indexer_password: *'\(.*\)' *$/\1/p" /tmp/wz-cred.txt | head -1) \
+ && printf 'Wazuh dashboard: https://172.20.0.20\nTai khoan: admin\nMat khau : %s\n' "$P" > /etc/soc-tools/dashboard.txt \
+ && chmod 644 /etc/soc-tools/dashboard.txt && rm -f /tmp/wz-cred.txt \
+ && test -n "$P"
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+# D4: file he thong cua Bai 18 (defender/_system) thuoc root; bat unit khoa quyen (chay SAU parameterize)
+RUN chown -R root:root /usr/local/sbin/bai18-* /usr/local/bin /usr/local/lib/soc-tools /usr/local/share/goi-y /etc/soc-tools /etc/systemd/system/bai18-*.service 2>/dev/null; \
+    mkdir -p /etc/systemd/system/multi-user.target.wants \
+ && ln -sf /etc/systemd/system/bai18-khoa-quyen.service /etc/systemd/system/multi-user.target.wants/bai18-khoa-quyen.service \
+ && ln -sf /etc/systemd/system/bai18-watcher.service /etc/systemd/system/multi-user.target.wants/bai18-watcher.service \
+ && chmod 755 /usr/local/bin/kiem-thu-luat /usr/local/bin/thu-dong /usr/local/bin/goi-y /usr/local/bin/trang-thai /usr/local/sbin/bai18-* \
+ && chmod 644 /usr/local/lib/soc-tools/*.py /etc/soc-tools/lab.json
+#
+# Base firefox3 co the da co san user 'ubuntu' -> chi tao neu chua co
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+# D4 (Bai 18): SV KHONG co quyen root - watcher, nhat ky thoi gian va phieu dong bang thuoc root.
+# Anh nen cho ubuntu vao nhom sudo (NOPASSWD:ALL); Labtainers can sudo luc khoi dong -> KHONG go o day,
+# ma go bang bai18-khoa-quyen.service sau khi /var/labtainer/did_param xuat hien. Sau do chi con soc-tools:
+RUN printf '%s\n' \
+  'ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/bai18-thu-thap' \
+  > /etc/sudoers.d/soc-tools && chmod 440 /etc/sudoers.d/soc-tools
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]

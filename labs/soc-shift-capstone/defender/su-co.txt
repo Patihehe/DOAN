@@ -1,0 +1,5 @@
+# GOM SU CO (SOP muc 9) - cac ticket cung MOT chuoi tan cong = MOT su co
+SC1=                # cac ticket cung chuoi, vd INC-201,INC-207
+SC1_HOST=           # may trung tam cua su co
+SC1_GIAI_DOAN=      # so giai doan cua chuoi XAY RA TRONG CA (tinh ca giai doan KHONG co ticket;
+                    # khong tinh hoat dong truoc ca, vd do tham luc chieu)

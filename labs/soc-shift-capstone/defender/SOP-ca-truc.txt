@@ -1,0 +1,104 @@
+SOP-T1-04  QUY TRÌNH CA TRỰC ĐÊM — SOC CÔNG TY X  (Tier 1, một người trực)
+(dựa trên SOP-T1-03 Triage cảnh báo; bổ sung mục 2, 9, 11, 12 cho ca trực)
+
+0. NGUỒN DỮ LIỆU
+   - Mọi máy gửi log về SIEM qua syslog tập trung → trên dashboard trường agent luôn là "siem".
+     MÁY của một sự kiện = trường predecoder.hostname.
+   - Hàng đợi ticket: Discover, truy vấn  data.ticket:*  (bật auto-refresh 30s suốt ca).
+   - Ngữ cảnh doanh nghiệp: index pattern ctx-*  (tài sản, dịch vụ, phiếu thay đổi, nhân sự).
+
+1. MỤC TIÊU THỜI GIAN
+   - Ticket P1 mới: XÁC NHẬN (ghi verdict + ghi chú leo thang) trong ≤ 10 phút kể từ khi xuất hiện.
+   - Bão cảnh báo: KHOANH VÙNG trong ≤ 20 phút kể từ khi bắt đầu.
+   - Yêu cầu luật khẩn của IR: triển khai bản "đủ tốt" trong ≤ 20 phút kể từ khi nhận.
+   - Ticket thường: mục tiêu ≤ 5 phút/ticket.
+
+2. THỨ TỰ ƯU TIÊN GIỮA CÁC LOẠI VIỆC (cao → thấp)
+   (1) Ticket P1 mới.
+   (2) Bão cảnh báo. Bão vừa làm ngập dashboard, vừa có thể CHE một tấn công thật.
+   (3) Yêu cầu luật khẩn của IR.
+   (4) Ticket thường, theo thứ tự thời gian xuất hiện (cũ trước).
+   Đang làm việc (3)/(4) mà có việc (1)/(2) mới → DỪNG, chuyển sang việc mới.
+
+3. BẮT BUỘC PIVOT (ít nhất 2 nguồn cho mỗi ticket)
+   a. LOG THÔ: cùng máy + cùng IP/user/tiến trình, cửa sổ ±30 phút quanh alert.
+      Tìm BƯỚC TIẾP THEO: đăng nhập thành công, mã thực thi, dữ liệu rời đi.
+      (Tên người dùng của sshd nằm ở trường data.dstuser.)
+   b. NGỮ CẢNH (ctx-*): tài sản (mức quan trọng), dịch vụ đã duyệt (SVC),
+      phiếu thay đổi (CHG), nhân sự (nghỉ phép LV, trực on-call OC).
+
+4. QUY TẮC KHỚP NGỮ CẢNH
+   Một bản ghi CHỈ được dùng để đóng ticket khi khớp ĐỦ các điều kiện:
+     (1) đúng MÁY (trường host)
+     (2) đúng CHỦ THỂ (IP nguồn / user / tiến trình / domain / đường dẫn)
+     (3) trạng thái còn hiệu lực (CHG/OC: approved ; SVC: approved, không 'retired')
+     (4) CHỈ với CHG và OC (bản ghi có thời hạn): giờ alert nằm TRONG khung start–end.
+         SVC là danh mục thường trực, không có khung giờ.
+   ⇒ CHG, OC: 4 điều kiện.   SVC: 3 điều kiện (1)–(3).
+   Thiếu 1 điều kiện = coi như KHÔNG có ngữ cảnh.
+   Nhân viên đang NGHỈ PHÉP (LV) mà đăng nhập = không có căn cứ hợp lệ.
+
+5. ĐỊNH NGHĨA VERDICT VÀ HÀNH ĐỘNG
+   "Hoạt động luật nhắm tới" = LOẠI hành vi nguy hiểm ghi trong TÊN luật
+   (vd "nghi tuồn dữ liệu qua DNS"), KHÔNG phải đặc trưng kỹ thuật luật đo (vd "subdomain dài").
+   V=1 TP  : hoạt động luật nhắm tới CÓ THẬT và KHÔNG được phép.          → LEO THANG.
+   V=2 BTP : hoạt động luật nhắm tới CÓ THẬT nhưng ĐƯỢC PHÉP: có bản ghi
+             CHG/OC khớp đủ (mục 4).                                        → ĐÓNG, ghi số CHG/OC.
+   V=3 FP  : hoạt động luật nhắm tới KHÔNG xảy ra — luật nổ trên một hoạt động
+             KHÁC LOẠI (phần mềm hợp lệ có đặc trưng giống). Giải thích bằng
+             một SVC đã duyệt.                                              → ĐÓNG, ghi số SVC.
+   Chưa đủ căn cứ để đóng → coi là TP và leo thang. Bỏ sót TP là lỗi NẶNG nhất.
+
+6. MA TRẬN ƯU TIÊN (chỉ áp dụng cho TP; BTP/FP luôn P=4)
+   Giai đoạn:  A = đang tác động (thực thi mã, dữ liệu đang rời đi, C2 đang hoạt động)
+               B = đã truy cập thành công, chưa thấy tác động
+               C = chỉ thử, chưa thành công
+   Mức tài sản lấy từ ctx-assets (criticality) của MÁY GHI TRONG TICKET.
+                     Cao    TB    Thấp
+       Giai đoạn A   P1     P1    P2
+       Giai đoạn B   P1     P2    P3
+       Giai đoạn C   P3     P3    P4
+   KHÔNG xếp ưu tiên theo rule.level.
+
+7. BẰNG CHỨNG BẮT BUỘC (cột E trong phiếu) — một số nguyên:
+   TP  : IOC chính
+           - tài khoản bị chiếm / bị lạm dụng → số id (emp4521 → 4521)
+           - IP kẻ tấn công / IP C2 → octet cuối
+           - máy nội bộ bị nhiễm (khi IOC là máy nguồn, vd tuồn dữ liệu) → octet cuối IP máy đó
+   BTP : số bản ghi phê duyệt khớp đủ (CHG-7731 → 7731 ; OC-0412 → 412)
+   FP  : số SVC giải thích hành vi (SVC-207 → 207)
+
+8. PHIẾU TRIAGE (~/triage.txt) — mỗi ticket 1 dòng:
+   INC-xxx=<V>,<P>,<E>
+   Ghi muộn vẫn hơn bỏ trống: ticket không có dòng = chưa xử lý.
+
+9. GOM SỰ CỐ (~/su-co.txt)
+   Nhiều ticket thuộc cùng MỘT chuỗi tấn công → ghi thành MỘT sự cố (SC1, SC2, ...).
+   Ticket giống một bước của chuỗi nhưng ở MÁY KHÁC, không có liên hệ → KHÔNG gom.
+   Mỗi sự cố chỉ cần MỘT ghi chú leo thang, cập nhật khi có ticket mới của chuỗi.
+
+10. GHI CHÚ LEO THANG (~/leo-thang/SC<n>.txt) — bắt buộc cho mỗi sự cố có P1.
+    Điền đủ các trường KEY=giá trị trong khung. Cập nhật (không tạo file mới) khi chuỗi có bước mới.
+    - MITRE ghi SỐ (T1071 → 1071), nhiều kỹ thuật cách nhau dấu phẩy.
+    - LIEN_QUAN: số ticket KHÁC thuộc CÙNG sự cố.
+    - DE_XUAT: chọn MỌI mã phù hợp, cách nhau dấu phẩy. Chọn sai mã có hại
+      bị tính là lỗi, kể cả khi chọn đủ mã đúng.
+        1 = Cô lập mạng máy bị ảnh hưởng (giữ máy chạy)
+        2 = Giữ nguyên bộ nhớ/tiến trình để IR thu thập (KHÔNG tắt, KHÔNG kill)
+        3 = Chặn IP C2 / IP kẻ tấn công tại biên
+        4 = Tắt nguồn máy ngay
+        5 = Vô hiệu hóa / đặt lại mật khẩu tài khoản liên quan
+        6 = Xóa ngay file độc trên máy
+        7 = Đóng ticket vì đã chặn được IP
+        8 = Báo chủ sở hữu tài sản
+
+11. THAY ĐỔI LUẬT TRONG CA (~/luat/local_rules.xml, nạp bằng: kiem-thu-luat)
+    - Mọi luật cảnh báo: level ≥ 10, có <mitre>, nằm trong dải ID được giao.
+    - CẤM tắt luật hoặc hạ luật xuống dưới mức cảnh báo để dập bão.
+    - Ngoại lệ = luật con level 0, dựa trên TRƯỜNG + DANH MỤC CÓ CĂN CỨ (phiếu thay đổi,
+      dịch vụ đã duyệt). Ngoại lệ càng hẹp càng tốt: cùng lúc đúng máy nguồn VÀ đúng hành vi.
+    - Trước khi nạp: kiểm bằng thu-dong và tập phát triển kèm yêu cầu.
+
+12. BÀN GIAO CA (~/ban-giao.txt) — điền đủ các trường, viết cho người KHÔNG ở trong ca:
+    sự cố còn mở, luật đã đổi, ticket chưa xử lý, rủi ro ca sau phải theo dõi ngay,
+    việc cần trưởng ca / IR quyết định.

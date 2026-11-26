@@ -1,0 +1,51 @@
+[1.2]
+GOM SU CO (cap 2)
+- Loc moi canh bao cua predecoder.hostname: web-shop trong ca, sap theo thoi gian.
+  Cac ticket tren CUNG may, noi tiep nhau (vao -> dat file -> goi lenh -> C2 -> ...) la mot chuoi.
+- Mot ticket trong giong mot buoc cua chuoi nhung nam tren MAY KHAC: tra ctx-assets (dich vu
+  da duyet) va log tho cua may do truoc khi gom.
+- GIAI_DOAN dem ca buoc KHONG co ticket (vd lenh qua webshell, quet noi bo trong bao).
+
+[1.3]
+GOM SU CO (cap 3)
+- Chuoi tren web-shop: SQLi thanh cong -> file .phtml moi trong uploads/ -> lenh qua webshell
+  (khong ticket) -> tien trinh nguy trang goi C2 dinh ky -> quet noi bo (tron trong bao, khong
+  ticket) -> tuon du lieu qua DNS. Ca 4 ticket co ticket deu la P1 (may muc Cao, giai doan A/B).
+- Ticket "ket noi ra ngoai dinh ky" tren may KHAC co SVC giai thich -> FP, KHONG gom.
+- Leo thang: 1 file leo-thang/SC1.txt, cap nhat sau moi buoc; IOC_C2 = octet cuoi IP C2.
+
+[2.2]
+LUAT R-A (cap 2)
+- Thu muc upload chi nen phuc vu anh/tai lieu: MOI request toi SCRIPT trong do (co query) deu dang ngo.
+- Ten tham so doi lien tuc -> dung khop ten tham so; khop DUONG DAN + phan mo rong.
+- Danh muc dich vu da duyet (ctx-assets, type service) co MOT script hop le trong uploads/.
+- thu-dong mot dong access log de xem truong url va luat nen (31100).
+
+[2.3]
+LUAT R-A (cap 3)
+- Luat con cua 31100, level 12, MITRE T1505.003:
+    <url type="pcre2">^/uploads/[^?]*\.(php|phtml|phar)\?</url>
+- Ngoai le script da duyet: luat con level 0 cua luat tren, <url type="pcre2"> khop DUONG DAN script do.
+  (Khong dung CDB list match_key cho url: url chua ca query string nen khop nguyen gia tri khong trung.)
+- KHONG dung <field name="url">: url la truong TINH -> Wazuh tu choi (loi 1113).
+
+[3.2]
+LUAT R-B (cap 2)
+- Phieu thay doi cua dot trien khai ghi may nguon nao, cong nao?
+- Top values data.srcip cua bao: co may nguon nao KHONG nam trong phieu thay doi?
+- Ngoai le chi theo may nguon, hoac chi theo cong, deu qua rong: can CA HAI.
+
+[3.3]
+LUAT R-B (cap 3)
+- Giu nguyen 100342 (level 1) va 100340 (tan suat). Them luat con level 0 cua 100342:
+    <list field="srcip" lookup="address_match_key">etc/lists/sao-luu-hosts</list>
+    <list field="dstport" lookup="match_key">etc/lists/sao-luu-ports</list>
+  dien IP cac may sao luu (theo CHG) vao ~/luat/lists/sao-luu-hosts, cong vao sao-luu-ports.
+- Sau khi nap, canh bao 100340 con lai tu web-shop chinh la tan cong bi che.
+- KHONG xoa / ha level 100340, KHONG tang nguong vo toi va (recall tap an se tut).
+
+[4.3]
+THU TU TRONG CA (cap 3)
+- P1 moi -> xac nhan + leo thang ngay; bao -> khoanh vung; yeu cau IR -> ban "du tot" truoc.
+- Hop ly: C1 -> C2 -> (dot 2) -> R-A ngay khi den -> C4 (dung R-A neu chua xong) -> R-B ->
+  phan con lai cua hang doi, xen C6 ngay khi den; cap nhat leo-thang/SC1.txt sau moi buoc.

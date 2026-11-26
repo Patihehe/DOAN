@@ -1,0 +1,25 @@
+<!--
+  ~/luat/local_rules.xml - Bai 18. Luat CUA BAN, nap bang:  sudo kiem-thu-luat
+  Dai ID:  R-A 100330-100339  |  R-B 100340-100349
+  Luat canh bao: level >= 10 va co <mitre>. Ngoai le: luat con level 0, dua tren truong + danh muc co can cu.
+  Truong TINH (srcip, dstip, dstport, url, id) dung the rieng (<srcip>, <dstport>, <url>...), KHONG dung <field name="...">.
+-->
+<group name="bai18,">
+
+  <!-- R-B (dang chay tren san xuat): moi su kien ket noi (netfilter) -> dem. Level 1: khong ghi alerts.json
+       nhung VAN dem duoc (Wazuh khong dem tan suat tren luat level 0 nhu 4100). -->
+  <rule id="100342" level="1">
+    <if_sid>4100</if_sid>
+    <description>Su kien ket noi (dem cho R-B)</description>
+  </rule>
+
+  <!-- R-B: mot may ket noi toi nhieu dich noi bo trong thoi gian ngan -->
+  <rule id="100340" level="10" frequency="8" timeframe="120">
+    <if_matched_sid>100342</if_matched_sid>
+    <same_srcip />
+    <different_dstip />
+    <description>Mot may ket noi toi nhieu may noi bo trong thoi gian ngan</description>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+</group>

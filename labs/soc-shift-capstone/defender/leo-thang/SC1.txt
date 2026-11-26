@@ -1,0 +1,10 @@
+# GHI CHU LEO THANG - su co SC1 (SOP muc 10). CAP NHAT khi chuoi co buoc moi.
+TICKET=        # ticket P1 dau tien cua su co (so INC)
+HOST=          # may bi anh huong
+ASSET_LEVEL=   # 1=Cao 2=TB 3=Thap (theo ctx-assets)
+STAGE=         # 1=A dang tac dong  2=B da truy cap  3=C chi thu
+MITRE=         # so ky thuat (T1071 -> 1071), nhieu so cach nhau dau phay
+IOC_C2=        # octet cuoi IP C2
+LIEN_QUAN=     # so ticket KHAC thuoc cung su co
+DE_XUAT=       # cac ma 1..8 theo SOP muc 10, cach nhau dau phay
+TOM_TAT=       # 2-3 cau: chuyen gi, tu khi nao, bang cach nao, dang o giai doan nao

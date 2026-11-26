@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+# trang-thai - Bai 18: tinh hinh ca truc (KHONG cho biet dung/sai).
+import json, os, re, time, urllib.request
+import xml.etree.ElementTree as ET
+
+HOME = os.path.expanduser("~")
+SIEM = os.environ.get("BAI18_SIEM", "http://172.20.0.20:8088")
+
+
+def get(path):
+    return json.loads(urllib.request.urlopen(SIEM + path, timeout=4).read())
+
+
+mat_lien_lac = False
+try:
+    sh = get("/shift.json")
+except Exception:  # noqa: BLE001
+    sh = {}
+    try:                                   # ca da chay ma siem khong tra loi (siem khoi dong lai?)
+        sh = json.load(open(os.environ.get("BAI18_CACHE", "/var/tmp/bai18-shift.json")))
+        mat_lien_lac = bool(sh.get("t0"))
+    except (OSError, ValueError):
+        sh = {}
+try:
+    if get("/canh-bao.json").get("loi") == "DIA_DAY":
+        print("!! siem LOI: dia day -> Wazuh khong ghi duoc ticket moi. Bao giang vien / giai phong dia VM.")
+except Exception:  # noqa: BLE001
+    pass
+if mat_lien_lac:
+    print("!! Mat lien lac voi siem (co the dang khoi dong lai). Ca VAN tinh gio; ticket moi se hien khi siem len lai.")
+if not sh.get("t0"):
+    try:
+        cb = get("/chuan-bi.json")
+        print("Ca chua bat dau - siem dang chuan bi du lieu ca: xong %d/%d buoc (%s)."
+              % (len(cb.get("xong", [])), cb.get("tong", 7), ", ".join(cb.get("xong", [])) or "-"))
+    except Exception:  # noqa: BLE001
+        print("Ca chua bat dau - siem dang khoi dong Wazuh (indexer/manager, thuong 5-10 phut).")
+    print("Trong luc cho: doc ~/SOP-ca-truc.txt, ~/ban-giao-ca-truoc.txt, viet ~/ke-hoach.txt, khao-sat (TRUOC=).")
+    print("Ca tu bat dau khi siem san sang; ban se thay thong bao o lenh ke tiep.")
+    raise SystemExit(0)
+now = time.time()
+t0, end = sh["t0"], sh.get("end") or sh["t0"] + 5400
+dur = (end - t0) / 60
+print("Ca truc: phut %d / %d  (%s)" % ((min(now, end) - t0) // 60, dur,
+                                       "DA HET CA - phieu da dong bang" if now >= end else "con %d phut" % ((end - now) // 60)))
+tk = sorted((ts, inc) for inc, ts in (sh.get("tickets") or {}).items())
+done = set()
+try:
+    for ln in open(os.path.join(HOME, "triage.txt"), encoding="utf-8", errors="replace"):
+        m = re.match(r"^\s*INC-(\d+)\s*=\s*\S", ln)
+        if m:
+            done.add("INC-" + m.group(1))
+except OSError:
+    pass
+print("Ticket da xuat hien: %d  | da co dong trong triage.txt: %d" % (len(tk), sum(1 for _, i in tk if i in done)))
+miss = [i for _, i in tk if i not in done]
+if miss:
+    print("  chua co dong: " + ", ".join(miss))
+for k in ("R-A", "R-B"):
+    if k in (sh.get("released") or {}):
+        dl = sh["released"][k] + 20 * 60 * float(sh.get("scale") or 1.0)
+        tt = "het ca" if now >= end else ("QUA HAN" if now > dl else "con %d phut" % ((dl - now) // 60))
+        print("Yeu cau %s: mo luc %s, han %s (%s)" % (k, time.strftime("%H:%M", time.localtime(sh["released"][k])),
+              time.strftime("%H:%M", time.localtime(dl)), tt))
+try:
+    root = ET.fromstring("<r>" + open(os.path.join(HOME, "luat/local_rules.xml"), encoding="utf-8").read() + "</r>")
+    ids = [(int(r.get("id")), int(r.get("level", "0"))) for r in root.iter("rule") if (r.get("id") or "").isdigit()]
+    for name, lo, hi in (("R-A", 100330, 100339), ("R-B", 100340, 100349)):
+        n = sum(1 for i, l in ids if lo <= i <= hi and l >= 10)
+        print("File luat: %d luat canh bao dai %s (%d-%d)" % (n, name, lo, hi))
+except (OSError, ET.ParseError, ValueError):
+    print("File luat ~/luat/local_rules.xml: khong doc duoc (loi cu phap?)")
+try:
+    last = open(os.path.join(HOME, ".kiem-thu.log")).read().strip().splitlines()[-1]
+    print("Lan nap gan nhat (kiem-thu-luat): " + last[:19])
+except (OSError, IndexError):
+    print("Chua nap luat lan nao (kiem-thu-luat).")

@@ -1,0 +1,3 @@
+# PHIEU TRIAGE - moi ticket 1 dong (SOP muc 8):  INC-xxx=V,P,E
+#   V: 1=TP 2=BTP 3=FP    P: 1..4 (BTP/FP luon 4)    E: so nguyen (SOP muc 7)
+# Ghi lai dong de sua: dong CUOI CUNG cua moi ticket duoc tinh. Het ca -> phieu DONG BANG.

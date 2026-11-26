@@ -1,0 +1,3 @@
+# "Toi tu tin xu ly mot ca truc co nhieu loai viec den cung luc ma khong bo sot su co." (1 = khong tu tin ... 5 = rat tu tin)
+TRUOC=
+SAU=

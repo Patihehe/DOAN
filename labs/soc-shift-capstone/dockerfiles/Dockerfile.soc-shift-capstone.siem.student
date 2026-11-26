@@ -1,0 +1,103 @@
+#
+# siem (Bai 18) - dung anh nen chung soc-wazuh (Wazuh cai san). TERMINALS 0 (an voi sinh vien).
+# Chua: seed18 (nen, ctx-*, ticket), lich-ca (phat su kien theo T0), shiftd (:8088, shift.json cho defender), grade18.
+# Boot-hook Labtainers (fixlocal/parameter) BI BO QUA tren anh chung -> khoi tao bang SYSTEMD:
+# LUU Y: KHONG chay apply-shared-siem.sh len lab nay nua (file nay da la ban dung anh chung).
+#
+ARG registry
+FROM localhost:5000/soc-wazuh:latest
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+RUN (command -v python3 >/dev/null 2>&1) || (apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*) || true
+#
+# prestop (user ubuntu): chi duoc chay lenh thu thap cua Bai 18 (in dap an + ket qua cham; P3)
+RUN printf '%s\n' \
+  'ubuntu ALL=(ALL) NOPASSWD: /usr/bin/python3 /home/ubuntu/bai18/grade18.py *' \
+  > /etc/sudoers.d/labtainer-bai18 && chmod 440 /etc/sudoers.d/labtainer-bai18
+#
+# === systemd (P3): seed18 (1 lan) -> lich-ca (lien tuc) + shiftd (:8088) ; grade18 khi luat doi ===
+RUN mkdir -p /srv/shiftd /etc/systemd/system/multi-user.target.wants \
+ && printf '%s\n' '[Unit]' 'Description=Bai 18 - seed (nen, ctx, Wazuh, tap an) + dat T0' \
+   'After=wazuh-manager.service wazuh-indexer.service wazuh-dashboard.service network-online.target' \
+   'Wants=wazuh-manager.service' '[Service]' 'Type=oneshot' 'RemainAfterExit=yes' 'TimeoutStartSec=2400' \
+   'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/seed18.py' \
+   '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/seed-bai18.service \
+ && printf '%s\n' '[Unit]' 'Description=Bai 18 - lich ca truc (phat su kien theo T0)' 'After=seed-bai18.service' \
+   '[Service]' 'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/lich-ca.py' 'Restart=always' 'RestartSec=5' \
+   '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/lich-ca.service \
+ && printf '%s\n' '[Unit]' 'Description=Bai 18 - shiftd: shift.json + yeu cau cho defender (:8088, KHONG dap an)' \
+   'After=network-online.target' '[Service]' 'ExecStart=/usr/bin/python3 -m http.server 8088 --directory /srv/shiftd' \
+   'Restart=always' 'RestartSec=5' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/shiftd.service \
+ && printf '%s\n' '[Unit]' 'Description=Bai 18 - cham lai luat khi local_rules.xml doi' '[Path]' \
+   'PathChanged=/var/ossec/etc/rules/local_rules.xml' 'Unit=grade-bai18.service' '[Install]' 'WantedBy=multi-user.target' \
+   > /etc/systemd/system/grade-bai18.path \
+ && printf '%s\n' '[Unit]' 'Description=Bai 18 - phat lai tap an R-A/R-B' 'After=seed-bai18.service' '[Service]' 'Type=oneshot' \
+   'TimeoutStartSec=600' 'ExecStart=/usr/bin/python3 /home/ubuntu/bai18/grade18.py rules 20' > /etc/systemd/system/grade-bai18.service \
+ && for u in seed-bai18.service lich-ca.service shiftd.service grade-bai18.path; do \
+      ln -sf /etc/systemd/system/$u /etc/systemd/system/multi-user.target.wants/$u; done
+#
+# === Thoi gian cho cua systemd tren VM cham (bai hoc Lab 17) ===
+RUN mkdir -p /etc/systemd/system/wazuh-manager.service.d /etc/systemd/system/wazuh-indexer.service.d /etc/systemd/system/wazuh-dashboard.service.d \
+ && printf '[Service]\nTimeoutStartSec=600\n' > /etc/systemd/system/wazuh-manager.service.d/bai18-timeout.conf \
+ && printf '[Service]\nTimeoutStartSec=900\n' > /etc/systemd/system/wazuh-indexer.service.d/bai18-timeout.conf \
+ && printf '[Unit]\nAfter=wazuh-indexer.service\n[Service]\nRestart=on-failure\nRestartSec=30\n' > /etc/systemd/system/wazuh-dashboard.service.d/bai18-order.conf
+#
+# === Dong bo mui gio voi VM (ICT = UTC+7) ===
+ENV TZ=Asia/Ho_Chi_Minh
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/* || true
+#
+# === Entrypoint: khoi phuc quyen cac user Wazuh truoc systemd; don trang thai agent cu ===
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'for u in wazuh-indexer wazuh-dashboard; do' \
+  '  id "$u" >/dev/null 2>&1 || continue' \
+  '  chown -R "$u:$u" /usr/share/$u /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+  'done' \
+  'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+  'exec /sbin/init --log-target=journal 3>&1' \
+  > /entrypoint.sh && chmod +x /entrypoint.sh
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN id -u $user_name >/dev/null 2>&1 || useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+USER root
+RUN mkdir -p /home/$user_name/.local && echo "soc-shift-capstone" > /home/$user_name/.local/.labname \
+    && chown $user_name:$user_name /home/$user_name/.local/.labname 2>/dev/null || true
+# entrypoint nhanh: anh chung chown -R ca cay indexer/dashboard moi lan start -> overlayfs copy-up vai GB
+# (~5 phut + ton dia o container moi). /usr/share/<u> (JDK, plugin, node_modules: CHI DOC) -> chi chown file
+# SAI chu (find doc metadata, khong copy-up). Thu muc DU LIEU/cau hinh van chown -R de copy-up TRUOC khi
+# indexer chay: neu node.lock copy-up giua chung, Lucene bao "Underlying file changed by an external force"
+# va indexer chet (da gap tren VM 26/11).
+# TODO nhom: sua luon trong anh soc-wazuh roi bo khoi nay.
+RUN printf '%s\n' '#!/bin/bash' \
+   'for u in wazuh-indexer wazuh-dashboard; do' \
+   '  id "$u" >/dev/null 2>&1 || continue' \
+   '  [ -e /usr/share/$u ] && find /usr/share/$u ! -user "$u" -exec chown -h "$u:$u" {} + 2>/dev/null' \
+   '  chown -R "$u:$u" /var/lib/$u /var/log/$u /etc/$u /run/$u 2>/dev/null' \
+   'done' \
+   'rm -f /var/ossec/queue/rids/* /var/ossec/etc/client.keys /var/ossec/queue/agents-timestamp 2>/dev/null' \
+   'exec /sbin/init --log-target=journal 3>&1' > /entrypoint.sh && chmod 755 /entrypoint.sh
+CMD ["/entrypoint.sh"]

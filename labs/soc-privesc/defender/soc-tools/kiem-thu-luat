@@ -7,7 +7,7 @@
 #     "rules_file": "luat/local_rules.xml",        (tuong doi voi HOME nguoi hoc)
 #     "lists_dir":  "luat/lists",
 #     "lists":      ["gtfo-shell", "sudo-approved", "admin-hosts"],
-#     "dev_set":    "dev/dev.jsonl",
+#     "dev_set":    "dev/dev.jsonl",               (hoac "dev_sets": [..] - Bai 18: chi file DA co moi phat lai)
 #     "ranges":     "l1=100270-100279,l2=100280-100289,l3=100290-100299"
 #   }
 # An toan: luat loi -> KHOI PHUC ban dang chay truoc do, manager khong bi sap.
@@ -50,7 +50,15 @@ STATIC_FIELDS = {
     "srcip": "Dung <srcip> hoac <list field=\"srcip\" ...>.",
     "dstip": "Dung <dstip>.",
     "user": "Dung <user>.",
+    "url": "Dung <url> (co the type=\"pcre2\").",
+    "dstport": "Dung <dstport> hoac <list field=\"dstport\" ...>.",
+    "srcport": "Dung <srcport>.",
+    "id": "Dung <id>.",
+    "protocol": "Dung <protocol>.",
+    "action": "Dung <action>.",
 }
+# Luat nen level 0 (Wazuh KHONG dem tan suat tren luat level 0 - spike Bai 18)
+LEVEL0_BASES = {"4100", "31100", "12100", "5700", "5500", "530"}
 
 
 def check_rules_xml(text, ranges):
@@ -70,7 +78,15 @@ def check_rules_xml(text, ranges):
         if el.tag == "field" and el.get("name") in STATIC_FIELDS:
             errs.append('<field name="%s"> KHONG dung duoc: %s la truong TINH. %s'
                         % (el.get("name"), el.get("name"), STATIC_FIELDS[el.get("name")]))
+    for el in root.iter("different_field"):
+        if (el.text or "").strip() in STATIC_FIELDS:
+            errs.append("CANH BAO: <different_field>%s</different_field> hop le cu phap nhung KHONG co tac dung "
+                        "voi truong tinh -> dung <different_%s />" % (el.text.strip(), el.text.strip()))
     for rule in root.iter("rule"):
+        ms = rule.find("if_matched_sid")
+        if rule.get("frequency") and ms is not None and set((ms.text or "").replace(" ", "").split(",")) & LEVEL0_BASES:
+            errs.append("CANH BAO: luat %s dem tan suat tren luat nen level 0 (%s) -> se KHONG BAO GIO no; "
+                        "dem tren mot luat trung gian level >= 1" % (rule.get("id"), ms.text.strip()))
         rid = rule.get("id", "")
         if not rid.isdigit():
             errs.append("Luat thieu id hoac id khong phai so: %r" % rid)
@@ -91,7 +107,11 @@ def main():
     home = user_home()
     rules_path = os.path.join(home, cfg["rules_file"])
     lists_dir = os.path.join(home, cfg["lists_dir"])
-    dev_set = os.path.join(home, cfg["dev_set"])
+    dev_sets = [os.path.join(home, p) for p in (cfg.get("dev_sets") or [cfg["dev_set"]])]
+    dev_sets = [p for p in dev_sets if os.path.isfile(p)]
+    dev = []
+    for p in dev_sets:
+        dev += replay.load_set(p)
     ranges = replay.parse_ranges(cfg["ranges"])
 
     print("== 1) Kiem tra cuc bo: %s" % rules_path)
@@ -99,7 +119,7 @@ def main():
         die("khong thay file luat %s" % rules_path)
     text = open(rules_path, encoding="utf-8").read()
     errs = check_rules_xml(text, ranges)
-    hard = [e for e in errs if "thieu <mitre>" not in e]
+    hard = [e for e in errs if "thieu <mitre>" not in e and not e.startswith("CANH BAO")]
     for e in errs:
         print("   - " + e)
     if hard:
@@ -109,7 +129,7 @@ def main():
     # (bo phat lai gui ca cua so gan nhu cung luc nen tap kiem tra KHONG do duoc dieu nay).
     try:
         wins = {}
-        for sc in replay.load_set(dev_set):
+        for sc in dev:
             wins[sc["family"]] = max(wins.get(sc["family"], 0), int(sc.get("window_s", 0)))
         root = ET.fromstring("<root>" + text + "</root>")
         for rule in root.iter("rule"):
@@ -185,9 +205,13 @@ def main():
     if not api.restart():
         die("manager chua len lai sau 4 phut - chay lai lenh nay sau 1 phut.")
 
-    print("== 5) Phat lai tap phat trien %s" % dev_set)
-    res = replay.run(replay.ApiEngine(api), replay.load_set(dev_set), ranges)
-    replay.print_dev(res)
+    if not dev:
+        print("== 5) Chua co tap phat trien nao (yeu cau chua den) - luat DA nap, khong phat lai.")
+        res = {}
+    else:
+        print("== 5) Phat lai tap phat trien: %s" % ", ".join(dev_sets))
+        res = replay.run(replay.ApiEngine(api), dev, {f: r for f, r in ranges.items() if any(sc["family"] == f for sc in dev)})
+        replay.print_dev(res)
 
     sha = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
     summ = " ".join("%s:P%.2f/R%.2f" % (f, r["precision"], r["recall"]) for f, r in res.items())

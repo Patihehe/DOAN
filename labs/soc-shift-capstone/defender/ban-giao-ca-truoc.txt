@@ -1,0 +1,18 @@
+BÀN GIAO CA CHIỀU → CA ĐÊM   (người bàn giao: Trưởng ca chiều)
+
+1. Hàng đợi còn tồn
+   - Còn 1 ticket từ đầu giờ chiều chưa kịp xem (số INC nhỏ nhất trong hàng đợi). Cũ nhưng vẫn phải xử lý.
+
+2. Đang theo dõi
+   - Chiều nay web-shop bị vài IP ngoài dò SQLi (payload bị chặn, trả 403/500). Chưa thấy gì
+     lọt qua. Hoạt động dò thám buổi chiều KHÔNG tính là sự cố của ca đêm, nhưng để ý web-shop.
+   - Luật webshell hiện tại của web-shop chỉ bắt tham số "cmd=". Đã báo team Detection, chưa sửa.
+
+3. Thay đổi đã lên lịch tối nay
+   - DevOps triển khai agent sao lưu mới tới toàn bộ máy chủ (xem phiếu thay đổi trong ctx-changes).
+     Lần trước triển khai kiểu này dashboard rất ồn. Nhớ: ồn không có nghĩa là được tắt luật.
+   - Vài nhân viên đang nghỉ phép / trực on-call (ctx-hr) — tra trước khi đóng ticket đăng nhập.
+
+4. Liên hệ
+   - IR trực đêm nhận ghi chú leo thang qua ~/leo-thang/. IR có thể gửi yêu cầu luật khẩn vào ~/yeu-cau/.
+   - Trưởng ca đêm đọc ~/ban-giao.txt lúc giao ca sáng.

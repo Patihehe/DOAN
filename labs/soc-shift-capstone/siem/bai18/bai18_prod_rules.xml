@@ -1,0 +1,10 @@
+<!-- Bai 18 - luat SAN XUAT (SV khong thay, khong sua). Dai 100310-100319. -->
+<group name="bai18_prod,">
+  <!-- Luat webshell "cu": chi bat tham so 'cmd=' -> lenh webshell cua C3 (ten tham so khac) KHONG no -->
+  <rule id="100310" level="12">
+    <if_sid>31100</if_sid>
+    <url type="pcre2">[?&amp;]cmd=</url>
+    <description>Webshell: goi lenh qua tham so cmd</description>
+    <mitre><id>T1505.003</id></mitre>
+  </rule>
+</group>
